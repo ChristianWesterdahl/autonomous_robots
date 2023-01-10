@@ -1,0 +1,90 @@
+% final track simulation
+
+% X-distance measurement from start to box
+
+xodotoirsensor = 0.233
+followline "br" @v 0.2 :($drivendist > 1.05)
+wait 0.5
+x = $odox + xodotoirsensor + $irdistfrontmiddle
+eval x
+
+% Box gate
+
+% Move to the box
+turn 90 @v 0.5
+drive :($blacklinefound == 1)
+followline "bm" @v 0.35:($motionstatus == 1)
+ignoreobstacles
+drive @v 0.5:($crossingblackline == 1)
+ignoreobstacles
+fwd 0.25
+
+% Go backwards and pass the gate
+drive @v -0.5 :($irdistright > 0.25)|($irdistleft > 0.25)
+turn -90 @v 0.5
+drive :($crossingblackline == 1)
+$crossingblackline = 0
+followline "bl" :($crossingblackline == 1)
+$crossingblackline = 0
+turnr 0.1 75
+followline "bm" :($crossingblackline == 1)
+$crossingblackline = 0
+fwd 0.25
+turn 90
+ignoreobstacles
+followline "bm" :($drivendist > 0.9)
+
+% Other gates
+
+% Move forward until detect a gate
+turnr 0.2 80
+followline "bm" :($irdistright < 0.75)
+
+% Calculate gate distance and move robot there
+distgate = $irdistright + 0.35
+fwd 0.6 
+turn -90
+fwd distgate
+
+% Pass through the gate
+turn -90
+fwd 1.0 @v 0.35
+turn 90
+
+% Drive until finding other gate
+drive :($irdistright < 0.75)
+
+% Calculate gate distance and move robot there
+distgate = $irdistright
+fwd 0.45 
+turn -90
+fwd distgate @v 0.5
+
+% Get back to following black line and pass through another gate
+drive :($crossingblackline == 1)
+turnr 0.2 75
+$crossingblackline = 0
+followline "bm" @v 0.4:($crossingblackline == 1)
+
+% Move to white line and pass 2 more gates
+fwd 0.6
+followline "wm" :($crossingblackline == 1)
+
+% Go to garage
+turnr 0.2 -75
+followline "bm" :($crossingblackline == 1)
+
+% Open the door
+turn 90
+drive :($irdistright > 0.5)
+fwd 0.75
+turn -90 
+fwd 1.15
+turn -135
+fwd 0.125
+turn -45
+ignoreobstacles
+turnr 0.75 90
+fwd -0.15
+turn 90 
+fwd 0.75
