@@ -1,0 +1,107 @@
+% final track simulation
+
+% X-distance measurement from start to box
+
+xodotoirsensor = 0.233
+followline "br" @v 0.2 :($drivendist > 1.55)
+wait 0.5
+x = $odox + xodotoirsensor + $irdistfrontmiddle
+eval x
+
+% Box gate
+
+% Move to the box
+turn 90 @v 0.2
+drive :($blacklinefound == 1)
+followline "bm" @v 0.2:($motionstatus == 1)
+ignoreobstacles
+drive @v 0.2:($crossingblackline == 1)
+ignoreobstacles
+fwd 0.15
+
+% Go backwards and pass the gate
+fwd -1 @v -0.3 
+%drive @v -0.2 :($irdistright <= 0.25)|($irdistleft <= 0.25)
+%drive @v -0.2 :($irdistright > 0.25)|($irdistleft > 0.25)
+turn -90 @v 0.2
+drive :($crossingblackline == 1)
+$crossingblackline = 0
+followline "bl" :($crossingblackline == 1)
+$crossingblackline = 0
+turnr 0.1 75
+followline "bm" :($crossingblackline == 1)
+$crossingblackline = 0
+followline "br" @v 0.3 :($crossingblackline == 1)
+ignoreobstacles
+
+
+
+% Use distdriven but laser should be a better solution
+followline "bm" @v speed :($drivendist >= 1.2)
+stop
+turn 90
+
+%drive until wall and turn 
+drive @v speed :($motionstatus == 1)
+motionstatus = 0
+turn 90
+
+followwall "r" 0.4 @v 0.2 :($l0 <= 0.5 & $l8 <= 0.5)
+fwd 0.75 @v speed
+
+% Turn and drive though the first wall gate
+turn -90
+fwd 0.75
+turn -90
+
+% Follow the out side of the wall.
+fwd 0.5 @v speed
+%followwall "r" 0.4 @v 0.2 :($l0 <= 0.5 & $l8 <= 0.5)
+%fwd 0.75 @v speed
+drive @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+
+% Turn and drive though the second wall gate
+fwd 0.2 @v speed
+turn -90
+fwd 0.6
+
+% turn around
+turn -180
+
+
+followline "bm" @v 0.2:($crossingblackline == 1)
+
+ Move to white line and pass 2 more gates
+$blacklinefound =0
+drive :($drivendist >=0.5 & $blacklinefound == 0)
+turn 15
+followline "wm" :($crossingblackline == 1)
+
+
+% Go to garage
+turnr 0.2 -75
+followline "bm" :($crossingblackline == 1)
+
+% Open the door
+turn 90
+fwd 0.75
+turn -90 
+fwd 1.15
+
+
+turn -135
+ignoreobstacles
+fwd 0.125
+ignoreobstacles
+turn -45
+ignoreobstacles
+turnr 0.75 90
+ignoreobstacles
+fwd -0.15
+ignoreobstacles
+turn 90 
+ignoreobstacles
+fwd 0.75
+
+%TODO follow black line
