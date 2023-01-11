@@ -63,6 +63,7 @@ getoutputref(const char *sym_name, symTableElement *tab)
 #define WHEEL_SEPARATION 0.26  /* m */
 #define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
 #define DEFAULT_ROBOTPORT 24902
+#define k 0.001
 
 typedef struct
 {                          // input signals
@@ -90,6 +91,8 @@ typedef struct
   int cmd;
   int curcmd;
   double speedcmd;
+  //double allowedDecelerationSpeed;
+  double accelerationcmd;
   double dist;
   double angle;
   double theta_ref; // This is new
@@ -132,7 +135,7 @@ void sm_update(smtype *p);
 
 void update_motcon(motiontype *p, odotype *o);
 
-int fwd(double dist, double speed, int time);
+int fwd(double dist, double speed, double acceleration, int time);
 int turn(double angle, double speed, int time);
 int follow(double dist, double speed, int time); // New
 
@@ -184,7 +187,7 @@ void ctrlchandler(int sig)
 int main(int argc, char **argv)
 {
   int n = 0, arg, time = 0, opt, calibration;
-  double dist = 0, angle = 0, speed = 0;
+  double dist = 0, angle = 0, speed = 0, acceleration = 0;
   // install sighandlers
   if (1)
   {
@@ -374,11 +377,50 @@ int main(int argc, char **argv)
     switch (mission.state)
     {
     case ms_init:
-      n = 1;
+      n = 2;
       dist = 3;
-      angle = 0.0 / 180 * M_PI;
+      angle = 90.0 / 180 * M_PI;
       speed = 0.2;
-      mission.state = ms_followline; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      acceleration = 0.5;
+      mission.state = ms_fwd /*ms_followline*/; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+    break;
+    
+    //forward
+    case ms_fwd:
+      if (fwd(dist, speed, acceleration, mission.time)) 
+      {
+        n = n-1;
+        switch (n)
+        {
+        case 1: //going to end at n-1
+          mission.state = ms_turn;
+        break;
+        
+        case 0: //ending
+          mission.state = ms_end;
+        break;
+        }
+      }
+    break;
+
+    //turn
+    case ms_turn:
+      if (turn(angle, speed, mission.time)) 
+      {
+        n = n-1;
+        switch (n)
+        {
+        case 0: //ending
+          mission.state = ms_end;
+        break;
+        }
+      }
+    break;
+
+    //end
+    case ms_end:
+      mot.cmd = mot_stop;
+      running = 0;
       break;
     }
     /*  end of mission  */
@@ -526,7 +568,89 @@ void update_motcon(motiontype *p, odotype *o)
 
   switch (p->curcmd)
   {
+  //forward (fwd)
+  case mot_move:
 
+    if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0)
+    {  
+      p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
+    else
+    {
+      int forward = 1;
+      if (p->dist < 0.0) {forward = -1;}
+      //addding deceleration
+      double distance_to_destination = fabs((p->dist-((p->right_pos + p->left_pos) / 2 - p->startpos)));
+      v_max = sqrt(2*p->accelerationcmd*distance_to_destination); //calculating V_max=sqrt(2*a_max*d)
+
+
+      if ( (p->motorspeed_l > v_max && p->dist > 0.0) || (p->motorspeed_l < -v_max && p->dist < 0.0) ) //decellerating cap
+      {
+        p->motorspeed_l = forward*v_max;
+        p->motorspeed_r = forward*v_max;
+      }
+      else if (p->speedcmd-fabs(p->motorspeed_l) > p->accelerationcmd/100) //if new speed diffurence from old speed is less than accelleration(/100 do to update rate)
+      {
+        p->motorspeed_l = p->motorspeed_l + forward*(p->accelerationcmd/100);
+        p->motorspeed_r = p->motorspeed_r + forward*(p->accelerationcmd/100);
+      } 
+      else 
+      {
+        p->motorspeed_l = forward*p->speedcmd;
+        p->motorspeed_r = forward*p->speedcmd;
+      }
+    }
+    break;
+
+  //turning
+  case mot_turn:
+    angular_distance = p->theta_ref - o->theta;
+    //printf("Angular Distance: %f \n", angular_distance);
+    if (angular_distance > 0 && angular_distance <= M_PI)
+    { // If we have to turn left (the angle is less than 180 degrees and postiive)
+      //printf("TURNIG LEFT\n");
+      //printf("ANGLE: %f \n", p->theta_ref);
+      //printf("Theta_angle: %f \n", o->theta);
+      // printf("Left velocity: %f \n", p->motorspeed_l);
+      // printf("Right velocity: %f \n", p->motorspeed_r);
+      if (angular_distance > 0.5 / 180 * M_PI)
+      { // Condition suff small keep turning
+        p->motorspeed_r = p->motorspeed_r + k * angular_distance;
+        p->motorspeed_l = p->motorspeed_l - k * angular_distance;
+      }
+      else
+      {
+        //printf("Done turning!. Final angular distance: %f\n", angular_distance);
+        p->motorspeed_r = 0;
+        p->motorspeed_l = 0;
+        p->finished = 1;
+      }
+    }
+    else
+    { // Else we turn right
+      //printf("TURNING RIGHT\n");
+      //printf("ANGLE*: %f \n", p->theta_ref);
+      //printf("Theta_angle: %f \n", o->theta);
+      if (angular_distance < -0.5 / 180 * M_PI)
+      {
+        p->motorspeed_l = p->motorspeed_l - k * angular_distance;
+        p->motorspeed_r = p->motorspeed_r + k * angular_distance;
+      }
+      else
+      {
+        //printf("Done turning!. Final angular distance: %f\n", angular_distance);
+        p->motorspeed_l = 0;
+        p->motorspeed_r = 0;
+        p->finished = 1;
+      }
+    }
+    break;
+  
+  
+
+  //stopping
   case mot_stop:
     p->motorspeed_l = 0;
     p->motorspeed_r = 0;
@@ -534,12 +658,13 @@ void update_motcon(motiontype *p, odotype *o)
   }
 }
 
-int fwd(double dist, double speed, int time)
+int fwd(double dist, double speed, double acceleration, int time)
 {
   if (time == 0)
   {
     mot.cmd = mot_move;
     mot.speedcmd = speed;
+    mot.accelerationcmd = acceleration;
     mot.dist = dist;
     return 0;
   }
