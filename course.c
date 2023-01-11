@@ -113,7 +113,7 @@ enum
   mot_stop = 1,
   mot_move,
   mot_turn,
-  mot_follow //Homemade line follow function
+  mot_followBlack //Homemade line follow function
 };
 
 enum
@@ -121,7 +121,7 @@ enum
   ms_init,
   ms_fwd,
   ms_turn,
-  ms_followline,
+  ms_followBlack,
   ms_end
 };
 
@@ -138,6 +138,11 @@ void update_motcon(motiontype *p, odotype *o);
 int fwd(double dist, double speed, double acceleration, int time);
 int turn(double angle, double speed, int time);
 int follow(double dist, double speed, int time); // New
+//auxilory function (all new)
+double *calibrate_line(symTableElement *linesensor_values);
+int find_line_min(double *sensor_values, int orientation);
+double line_COM(double *sensor_values);
+
 
 odotype odo;
 smtype mission;
@@ -374,26 +379,29 @@ int main(int argc, char **argv)
     / mission statemachine
     */
     sm_update(&mission);
+    printf("n: %d\n", n);
     switch (mission.state)
     {
     case ms_init:
-      n = 2;
-      dist = 3;
+      n = 3;
+      dist = 0.5;
       angle = 90.0 / 180 * M_PI;
       speed = 0.2;
       acceleration = 0.5;
-      mission.state = ms_fwd /*ms_followline*/; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      mission.state = ms_fwd; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
     break;
     
     //forward
     case ms_fwd:
       if (fwd(dist, speed, acceleration, mission.time)) 
       {
+        printf(" method: forward\n", n);
         n = n-1;
         switch (n)
         {
-        case 1: //going to end at n-1
-          mission.state = ms_turn;
+        case 2: //going to end at n-1
+          dist = 1.5;
+          mission.state = ms_followBlack;
         break;
         
         case 0: //ending
@@ -405,11 +413,41 @@ int main(int argc, char **argv)
 
     //turn
     case ms_turn:
+      printf(" method: turn\n", n);
       if (turn(angle, speed, mission.time)) 
       {
         n = n-1;
         switch (n)
         {
+        case 3:
+          mission.state = ms_fwd;
+        break;
+
+
+        case 1:
+          mission.state = ms_fwd;
+        break;
+
+        case 0: //ending
+          mission.state = ms_end;
+        break;
+
+        }
+      }
+    break;
+
+    //followBlack
+    case ms_followBlack:
+      printf(" method: follow\n", n);
+      if(follow(dist, speed, mission.time)) 
+      {
+        n = n-1;
+        switch (n)
+        {
+        case 1:
+          mission.state = ms_turn;
+        break;
+
         case 0: //ending
           mission.state = ms_end;
         break;
@@ -543,9 +581,9 @@ void update_motcon(motiontype *p, odotype *o)
       p->curcmd = mot_turn;
       break;
 
-    case mot_follow: //This is new
+    case mot_followBlack: //This is new
       p->startpos = (p->left_pos + p->right_pos) / 2;
-      p->curcmd = mot_follow;
+      p->curcmd = mot_followBlack;
       break;
     }
 
@@ -604,7 +642,7 @@ void update_motcon(motiontype *p, odotype *o)
     }
     break;
 
-  //turning
+  //------------------------------------turning-----------------------------------
   case mot_turn:
     angular_distance = p->theta_ref - o->theta;
     //printf("Angular Distance: %f \n", angular_distance);
@@ -648,13 +686,48 @@ void update_motcon(motiontype *p, odotype *o)
     }
     break;
   
-  
+  //------------------------following black line------------------------------------------
+  case mot_followBlack:
+      calibrated_values = calibrate_line(linesensor);
+      sensor_index = find_line_min(calibrated_values, 0); //0, keeps left, 1 keeps right.
+      com = line_COM(calibrated_values);
+      remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
+      v_max = p->speedcmd;
+      v_delta = 0.01 * (3-sensor_index); // This version works with sensor index
+      // This version works with com
+      //  Have we reached
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | sensor_index == -1)
+      {
+        p->finished = 1;
+        p->motorspeed_l = 0;
+        p->motorspeed_r = 0;
+      }
+      if (v_max < fabs(p->motorspeed_l))
+      {
+        p->motorspeed_l = v_max;
+      }
+      if (v_max < fabs(p->motorspeed_r))
+      {
+        p->motorspeed_r = v_max;
+      }
+      if (v_delta == 0) { //Use this for sensor
+      //if (v_delta <= 0.001 && v_delta >= -0.001) { //If we are straight on the line, then full speed ahead! (use this for com)
+        p->motorspeed_l = v_max;
+        p->motorspeed_r = v_max;
+      }
+      else if (v_delta < 0){ // Large sensor index, turn right
+        p->motorspeed_r += v_delta;
+      }
+      else if (v_delta > 0){ // Small sensor index, turn left
+        p->motorspeed_l -= v_delta;
+      }
+    break;
 
   //stopping
   case mot_stop:
     p->motorspeed_l = 0;
     p->motorspeed_r = 0;
-    break;
+  break;
   }
 }
 
@@ -688,7 +761,7 @@ int turn(double angle, double speed, int time)
 int follow(double dist, double speed, int time){
   if (time == 0)
   {
-    mot.cmd = mot_follow;
+    mot.cmd = mot_followBlack;
     mot.speedcmd = speed;
     mot.dist = dist;
     return 0;
@@ -708,4 +781,64 @@ void sm_update(smtype *p)
   {
     p->time++;
   }
+}
+
+//aouxilory methods
+double *calibrate_line(symTableElement *linesensor_values)
+{
+  // This function converts uncalibrated linesensor values to calibrated
+  // using the linear transformation described in the calibration exercise.
+  static double r[8];
+  int i;
+
+  for (i = 0; i < 8; i++){
+    r[i] = (linesensor_values->data[i]) / 255.0;
+  }
+  return r;
+}
+
+int find_line_min(double *sensor_values, int orientation)
+{
+  // This function finds the position of the black line using the position of the
+  // lowest calibrated linesensor.
+  double curr_min = 1.0;
+  int index;
+  int i;
+  int all_same = 1;
+  for (i=7; i --> 0;){ //reverse loop
+    if (orientation == 0) {
+      if (sensor_values[i] < curr_min) {
+        curr_min = sensor_values[i];
+        index = 7-i;
+      }
+    }
+    else if (orientation == 1){
+      if (sensor_values[i] <= curr_min) {
+        curr_min = sensor_values[i];
+        index = 7-i;
+      }
+    }
+    if (i<7 && (sensor_values[i+1] == sensor_values[i])){
+      all_same *=1;
+    }
+    else if (i<7 && (sensor_values[i+1] != sensor_values[i])) {
+      all_same *= 0;
+    }
+  }
+  if (all_same == 1) return -1;
+  else return index;
+}
+
+double line_COM(double *sensor_values)
+{
+  double distance[8] = {-0.065,-0.045,-0.027,-0.009,0.009,0.027,0.045,0.065};
+  double intensity_sum = 0;
+  double distance_intensity_sum = 0;
+  int i;
+  for (i = 0; i < 8; i++)
+  {
+    distance_intensity_sum = distance_intensity_sum + distance[i]*sensor_values[i];
+    intensity_sum = intensity_sum+sensor_values[i]; //denominator
+  }
+  return distance_intensity_sum/intensity_sum;
 }

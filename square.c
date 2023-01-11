@@ -638,7 +638,7 @@ void update_motcon(motiontype *p, odotype *o)
       com = line_COM(calibrated_values);
       remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
       v_max = p->speedcmd;
-      //v_delta = 0.01 * (3-sensor_index); // This version works with sensor index
+      v_delta = 0.01 * (3-sensor_index); // This version works with sensor index
       // This version works with com
       //  Have we reached
       if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | sensor_index == -1)
@@ -656,8 +656,8 @@ void update_motcon(motiontype *p, odotype *o)
         p->motorspeed_r = v_max;
       }
       printf("delta V: %f\n", v_delta);
-      //if (v_delta == 0) { //Use this for sensor
-      if (v_delta <= 0.001 && v_delta >= -0.001) { //If we are straight on the line, then full speed ahead! (use this for com)
+      if (v_delta == 0) { //Use this for sensor
+      //if (v_delta <= 0.001 && v_delta >= -0.001) { //If we are straight on the line, then full speed ahead! (use this for com)
         p->motorspeed_l = v_max;
         p->motorspeed_r = v_max;
       }
