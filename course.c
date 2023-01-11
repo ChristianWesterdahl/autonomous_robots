@@ -91,12 +91,12 @@ typedef struct
   int cmd;
   int curcmd;
   double speedcmd;
-  //double allowedDecelerationSpeed;
   double accelerationcmd;
   double dist;
   double angle;
   double theta_ref; // This is new
   double left_pos, right_pos;
+  int followDir;
   // parameters
   double w;
   // output
@@ -108,7 +108,7 @@ typedef struct
 
 } motiontype;
 
-enum
+enum mot
 {
   mot_stop = 1,
   mot_move,
@@ -116,7 +116,7 @@ enum
   mot_followBlack //Homemade line follow function
 };
 
-enum
+enum ms
 {
   ms_init,
   ms_fwd,
@@ -137,12 +137,15 @@ void update_motcon(motiontype *p, odotype *o);
 
 int fwd(double dist, double speed, double acceleration, int time);
 int turn(double angle, double speed, int time);
-int follow(double dist, double speed, int time); // New
+int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 //auxilory function (all new)
 double *calibrate_line(symTableElement *linesensor_values);
 int find_line_min(double *sensor_values, int orientation);
 double line_COM(double *sensor_values);
 
+//deffining the course
+enum ms methods[4] = {ms_fwd, ms_followBlack, ms_turn, ms_end};
+//double vars[5] = {0.5/*fwd_1*/, "ms_followBlack", "ms_turn"};
 
 odotype odo;
 smtype mission;
@@ -191,7 +194,7 @@ void ctrlchandler(int sig)
 
 int main(int argc, char **argv)
 {
-  int n = 0, arg, time = 0, opt, calibration;
+  int n = 0, courseLength = 0, arg, time = 0, opt, calibration;
   double dist = 0, angle = 0, speed = 0, acceleration = 0;
   // install sighandlers
   if (1)
@@ -379,84 +382,53 @@ int main(int argc, char **argv)
     / mission statemachine
     */
     sm_update(&mission);
-    printf("n: %d\n", n);
     switch (mission.state)
     {
     case ms_init:
       n = 3;
+      courseLength = n;
       dist = 0.5;
       angle = 90.0 / 180 * M_PI;
       speed = 0.2;
       acceleration = 0.5;
-      mission.state = ms_fwd; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      mission.state = methods[courseLength-n];; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      printf("init end\n");
     break;
     
     //forward
     case ms_fwd:
       if (fwd(dist, speed, acceleration, mission.time)) 
       {
-        printf(" method: forward\n", n);
         n = n-1;
-        switch (n)
-        {
-        case 2: //going to end at n-1
-          dist = 1.5;
-          mission.state = ms_followBlack;
-        break;
-        
-        case 0: //ending
-          mission.state = ms_end;
-        break;
-        }
+        dist = 1.5;
+        mission.state = methods[courseLength-n];
+        printf("fwd end\n");
       }
     break;
 
     //turn
     case ms_turn:
-      printf(" method: turn\n", n);
       if (turn(angle, speed, mission.time)) 
       {
         n = n-1;
-        switch (n)
-        {
-        case 3:
-          mission.state = ms_fwd;
-        break;
-
-
-        case 1:
-          mission.state = ms_fwd;
-        break;
-
-        case 0: //ending
-          mission.state = ms_end;
-        break;
-
-        }
+        mission.state = methods[courseLength-n];
+        printf("turn end\n");      
       }
     break;
 
     //followBlack
     case ms_followBlack:
-      printf(" method: follow\n", n);
-      if(follow(dist, speed, mission.time)) 
+      if(follow(dist, speed, mission.time, 0)) 
       {
         n = n-1;
-        switch (n)
-        {
-        case 1:
-          mission.state = ms_turn;
-        break;
-
-        case 0: //ending
-          mission.state = ms_end;
-        break;
-        }
+        mission.state = methods[courseLength-n];
+        printf("follow end\n");
       }
     break;
 
     //end
     case ms_end:
+    printf("end\n");
       mot.cmd = mot_stop;
       running = 0;
       break;
@@ -603,7 +575,6 @@ void update_motcon(motiontype *p, odotype *o)
 
   //printf("Linesensor value: %d", linesensor);
   //printf("Linesensor no of indexes: %d %d %d %d %d %d %d %d \n", linesensor[0].name, linesensor[1], linesensor[2], linesensor[3], linesensor[4], linesensor[5], linesensor[6], linesensor[7]);
-
   switch (p->curcmd)
   {
   //forward (fwd)
@@ -689,7 +660,7 @@ void update_motcon(motiontype *p, odotype *o)
   //------------------------following black line------------------------------------------
   case mot_followBlack:
       calibrated_values = calibrate_line(linesensor);
-      sensor_index = find_line_min(calibrated_values, 0); //0, keeps left, 1 keeps right.
+      sensor_index = find_line_min(calibrated_values, p->followDir); //0, keeps left, 1 keeps right.
       com = line_COM(calibrated_values);
       remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
       v_max = p->speedcmd;
@@ -701,6 +672,7 @@ void update_motcon(motiontype *p, odotype *o)
         p->finished = 1;
         p->motorspeed_l = 0;
         p->motorspeed_r = 0;
+        break;
       }
       if (v_max < fabs(p->motorspeed_l))
       {
@@ -758,12 +730,13 @@ int turn(double angle, double speed, int time)
     return mot.finished;
 }
 
-int follow(double dist, double speed, int time){
+int follow(double dist, double speed, int time, int dir){
   if (time == 0)
   {
     mot.cmd = mot_followBlack;
     mot.speedcmd = speed;
     mot.dist = dist;
+    mot.followDir = dir;
     return 0;
   }
   else
