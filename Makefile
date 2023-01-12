@@ -10,9 +10,9 @@ LDFLAGS = -L${SMR}/lib
 #
 # Our program files
 #
-PROG   = square
+PROG   = course
 HDRS   =
-OBJS   = square.o serverif.o
+OBJS   = course.o serverif.o
 LIBS   = -lm /usr/local/smr/lib/librhd.a -lrobot
 
 all:	${PROG}

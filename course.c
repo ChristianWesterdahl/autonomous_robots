@@ -6,17 +6,24 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <getopt.h> // Added
 
 #include <sys/ioctl.h>
 #include "rhd.h"
 #include "componentserver.h"
 #include "xmlio.h"
+
+// Define pi
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
 
 
 struct xml_in *xmldata;
@@ -59,6 +66,7 @@ getoutputref(const char *sym_name, symTableElement *tab)
 /*****************************************
  * odometry
  */
+
 #define WHEEL_DIAMETER 0.06522 /* m */
 #define WHEEL_SEPARATION 0.26  /* m */
 #define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
@@ -101,6 +109,10 @@ typedef struct
   int finished;
   // internal variables
   double startpos;
+  // For sensors
+  int linecolor; //0 for black 1 for white
+  int orientation;
+  bool sensorstop;
 
 
 } motiontype;
@@ -110,7 +122,8 @@ enum
   mot_stop = 1,
   mot_move,
   mot_turn,
-  mot_follow //Homemade line follow function
+  mot_line, //Homemade line follow function
+  mot_wall //Homemade wall follow function
 };
 
 enum
@@ -118,7 +131,8 @@ enum
   ms_init,
   ms_fwd,
   ms_turn,
-  ms_followline,
+  ms_line,
+  ms_wall,
   ms_end
 };
 
@@ -128,18 +142,20 @@ typedef struct
   int time;
 } smtype;
 
+/********************************************
+ * Custom Headers
+ */
 void sm_update(smtype *p);
-
 void update_motcon(motiontype *p, odotype *o);
-
-int fwd(double dist, double speed, int time);
+int fwd(double speed, int time, double dist, bool sensorstop);
 int turn(double angle, double speed, int time);
-int follow(double dist, double speed, int time); // New
+int line(double speed, int linecolor, int orientation, int time, double dist, bool sensorstop); // New
+int wall(double speed, int orientation, int time, double dist, bool sensorstop); // New
+double *calibrate_line(symTableElement *linesensor_values);
 
 odotype odo;
 smtype mission;
 motiontype mot;
-
 
 // SMR input/output data
 
@@ -374,11 +390,11 @@ int main(int argc, char **argv)
     switch (mission.state)
     {
     case ms_init:
-      n = 1;
+      n = 1; // This should be the number of commands in the parsed smr-cl script.
       dist = 3;
       angle = 0.0 / 180 * M_PI;
       speed = 0.2;
-      mission.state = ms_followline; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      mission.state = ms_fwd; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
       break;
     }
     /*  end of mission  */
@@ -476,6 +492,16 @@ void update_odo(odotype *p)
   p->y = p->y + delta_U * sin(p->theta / 180 * M_PI);
 }
 
+/******************************************************
+*    _____ ____  _   _ _______ _____   ____  _        *
+*   / ____/ __ \| \ | |__   __|  __ \ / __ \| |       *
+*  | |   | |  | |  \| |  | |  | |__) | |  | | |       *
+*  | |   | |  | | . ` |  | |  |  _  /| |  | | |       *
+*  | |___| |__| | |\  |  | |  | | \ \| |__| | |____   *
+*   \_____\____/|_| \_|  |_|  |_|  \_\\____/|______|  *
+*                                                     *
+*******************************************************/
+
 void update_motcon(motiontype *p, odotype *o)
 {
   if (p->cmd != 0)
@@ -501,9 +527,12 @@ void update_motcon(motiontype *p, odotype *o)
       p->curcmd = mot_turn;
       break;
 
-    case mot_follow: //This is new
+    case mot_line: //This is new
       p->startpos = (p->left_pos + p->right_pos) / 2;
-      p->curcmd = mot_follow;
+      p->curcmd = mot_line;
+      break;
+    
+    case mot_wall: //
       break;
     }
 
@@ -511,36 +540,202 @@ void update_motcon(motiontype *p, odotype *o)
   }
 
   double remaining_dist;
-  double v_max;
-  double v_delta;
-  double angular_distance;
+  double max_V;
+  double remaining_angle;
   
   // Custom values for follow_line sensor functionality
-  double *calibrated_values;
+  double *calibrated_sensorvalues;
   int sensor_index;
-  int i;
-  double com;
-
-  //printf("Linesensor value: %d", linesensor);
-  //printf("Linesensor no of indexes: %d %d %d %d %d %d %d %d \n", linesensor[0].name, linesensor[1], linesensor[2], linesensor[3], linesensor[4], linesensor[5], linesensor[6], linesensor[7]);
+  int delta_V;
 
   switch (p->curcmd)
   {
-
   case mot_stop:
     p->motorspeed_l = 0;
     p->motorspeed_r = 0;
     break;
+
+  case mot_move:
+    remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
+    max_V = sqrt(2*0.5*fabs(remaining_dist));
+
+    // Check if goal is reached:
+    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
+    {
+      p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
+
+    // Decrease velocity:
+    else if (max_V < p->speedcmd)
+    {
+      p->motorspeed_l = max_V;
+      p->motorspeed_r = max_V;
+    }
+
+    // If not goal is reached then we should accelerate until we hit max velocity
+    else
+    {
+      // If the motorspeed of any motor is higher than the allowed speed given by the speedcmd, set top speed.
+      if ((p->speedcmd < p->motorspeed_l) | (p->speedcmd < p->motorspeed_r))
+      {
+        p->motorspeed_l = p->speedcmd;
+        p->motorspeed_r = p->speedcmd;
+      }
+      //Otherwise accelerate!
+      else
+      {
+        p->motorspeed_l += 0.5/100;
+        p->motorspeed_r += 0.5/100;
+      }
+    }
+    break;
+
+  case mot_turn:
+    // If we have to turn left (the angle is positive)
+    if (p->angle>0){
+
+      //Calculate the remaining angle to turn:
+      remaining_angle = ((p->angle*p->w)/2) - (p->right_pos-p->startpos);
+	    max_V = sqrt(2 * 0.5 * fabs(remaining_angle));
+
+      // Have we finished turning? If so stop!
+      if (p->right_pos-p->startpos > (p->angle*p->w)/2){
+        p->motorspeed_r=0;
+        p->motorspeed_l=0;
+        p->finished=1;
+	    }
+
+      //Decrease velocity for turning:
+      else if (max_V < p->speedcmd/2)
+      {
+        p->motorspeed_r = max_V;
+        p->motorspeed_l = -max_V;
+      }
+
+      //Else, if not angular goal is reached, we accelerate
+      else
+      {
+        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
+        if ((p->motorspeed_r > p->speedcmd/2) | (p->motorspeed_l < -p->speedcmd/2))
+        {
+          p->motorspeed_r = p->speedcmd/2;
+          p->motorspeed_l = -p->speedcmd/2;
+        }
+
+        //Else we should accelerate!
+        else 
+        {
+          p->motorspeed_r += 0.5 / 100;
+          p->motorspeed_l += -(0.5 / 100);
+        }
+      }	
+	  }
+	  else //Else we do a right turn
+    {
+      //Calculate the remaining angle to turn:
+      remaining_angle = (fabs(p->angle*p->w)/2) - (p->left_pos-p->startpos);
+	    max_V = sqrt(2 * 0.5 * fabs(remaining_angle));
+
+      //Have we finished turning? If so stop!
+	    if (p->left_pos-p->startpos > (fabs(p->angle)*p->w)/2)
+      {
+        p->motorspeed_l=0;
+        p->motorspeed_r=0;
+        p->finished=1;
+
+	    }
+      //Decrease velocity for turning:
+      else if (max_V < p->speedcmd/2)
+      {
+        p->motorspeed_r = -max_V;
+        p->motorspeed_l = max_V;
+      }
+	    else {
+        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
+        if ((p->motorspeed_r < -p->speedcmd/2) | (p->motorspeed_l > p->speedcmd/2))
+        {
+          p->motorspeed_r = -p->speedcmd/2;
+          p->motorspeed_l = p->speedcmd/2;
+        }
+
+        //Else we should accelerate!
+        else 
+        {
+          p->motorspeed_r += -(0.5 / 100);
+          p->motorspeed_l += 0.5 / 100;
+        }
+	    }
+	  }
+    break;
+
+  case mot_line:
+    calibrated_sensorvalues = calibrate_line(linesensor);
+    sensor_index = find_line_min(calibrated_sensorvalues, 0); // 0, hold right, 1 hold left.
+    
+    remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
+    max_V = sqrt(2*0.5*fabs(remaining_dist));
+    delta_V = 0.01 * (3-sensor_index);
+
+    // Check if destination is reached or sensors tell motor to stop.
+    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) |  mot.sensorstop)
+    {
+      p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
+
+    // Check if any speed  surpasses max allowed speed, or else set it.
+    if (p->speedcmd < fabs(p->motorspeed_l)) p->motorspeed_l = p->speedcmd;
+    if (p->speedcmd < fabs(p->motorspeed_r)) p->motorspeed_r = p->speedcmd;
+    
+    if (delta_V == 0)
+    {
+      // Decrease velocity:
+      if (max_V < p->speedcmd)
+      {
+        p->motorspeed_l = max_V;
+        p->motorspeed_r = max_V;
+      }
+      else // Else accelerate
+      {
+        p->motorspeed_l += 0.5 / 100;
+        p->motorspeed_r += 0.5 / 100;
+      }
+    }
+    // If less than 0, this means the sensor index is large (ie. to the left, and we should turn this way)
+    else if (delta_V < 0) p->motorspeed_l += delta_V; //Delta in this case is negative, we should decrease speed on left wheel
+    
+    // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
+    else if (delta_V > 0) p->motorspeed_r -= delta_V // Delta in this case is positive, we should decrease speed on right wheel
+    break;
+  
+  case mot_wall:
+    printf("Not yet implemented!");
+    break;
+
   }
 }
 
-int fwd(double dist, double speed, int time)
+/*************************************************
+*    __                  _   _                   *
+*   / _|                | | (_)                  *
+*  | |_ _   _ _ __   ___| |_ _  ___  _ __  ___   *
+*  |  _| | | | '_ \ / __| __| |/ _ \| '_ \/ __|  *
+*  | | | |_| | | | | (__| |_| | (_) | | | \__ \  *
+*  |_|  \__,_|_| |_|\___|\__|_|\___/|_| |_|___/  *
+*                                                *
+*************************************************/
+
+int fwd(double speed, int time, double dist, bool sensorstop)
 {
   if (time == 0)
   {
     mot.cmd = mot_move;
     mot.speedcmd = speed;
     mot.dist = dist;
+    mot.sensorstop = sensorstop;
     return 0;
   }
   else
@@ -560,16 +755,25 @@ int turn(double angle, double speed, int time)
     return mot.finished;
 }
 
-int follow(double dist, double speed, int time){
+int line(double speed, int linecolor, int orientation, int time, double dist, bool sensorstop)
+{
   if (time == 0)
   {
-    mot.cmd = mot_follow;
+    mot.cmd = mot_line;
     mot.speedcmd = speed;
+    mot.linecolor = linecolor;
     mot.dist = dist;
+    mot.sensorstop = sensorstop;
+    mot.orientation = orientation;
     return 0;
   }
   else
     return mot.finished;
+}
+
+int wall(double speed, int orientation, int time, double dist, bool sensorstop)
+{
+  printf("Not implemented!");
 }
 
 void sm_update(smtype *p)
@@ -584,3 +788,78 @@ void sm_update(smtype *p)
     p->time++;
   }
 }
+
+double *calibrate_line(symTableElement *linesensor_values)
+{
+  // Converta an uncalibrated linesnesor value to a calibrated one.
+  static double readings[8];
+  int i;
+
+  for (i = 0; i < 8; i++)
+  {
+    readings[i] = (linesensor_values->data[i])/ 255.0;
+  }
+  return readings;
+  }
+
+int find_line_min(double *sensor_values, int orientation)
+{
+  // This function finds the position of the black line 
+  // using the position of the lowest calibrated linesensor.
+  // Note that we need to loop backwards over the values
+
+  double curr_min = 1.0;
+  int chosen_index;
+  int i;
+  int all_equal = 1;
+  double sum;
+
+  // Loop backwards over the input array of sensor values:
+  for (i=7; i--> 0;)
+  {
+    if (orientation == 0)
+    {
+      if (sensor_values[i] < curr_min)
+      {
+        curr_min = sensor_values[i];
+        chosen_index = i;
+      }
+    }
+    else
+    {
+      if (sensor_values[i] <= curr_min)
+      {
+        curr_min = sensor_values[i];
+        chosen_index = i;
+      }
+    }
+    // Finally we desire to check if all the sensor values are the same
+    sum += sensor_values[i];
+  }
+  for (i = 0; i<8; i++)
+  {
+    if (compare_floats(sum/8.0, sensor_values[i]))
+    {
+      all_equal * 1;
+    }
+    else all_equal * 0;
+  }
+  if (all_equal = 1) return -1;
+  else return chosen_index; 
+}
+
+bool compare_floats(float f1, float f2)
+{
+  // Code taken from: 
+  // https://how-to.fandom.com/wiki/Howto_compare_floating_point_numbers_in_the_C_programming_language
+  float precision = 0.00001;
+  if (((f1 - precision) < f2) && ((f1 + precision) > f2)) // Check if we are within interval
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+

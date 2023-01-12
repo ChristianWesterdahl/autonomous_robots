@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "signal.h": "c"
+        "signal.h": "c",
+        "string.h": "c",
+        "cmath": "c",
+        "complex": "c"
     }
 }
