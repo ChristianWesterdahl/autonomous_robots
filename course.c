@@ -156,20 +156,29 @@ resetOdo()
 
 //methods
 enum ms course_methods[100] = { //remember to update the array length!!!!!!!
+  //ms_turn,
+  //ms_resetOdo,
+  //ms_turn,
+  //ms_resetOdo,
   ms_fwd, 
   ms_followBlack,
   ms_resetOdo, 
   ms_turn,
-  ms_fwd, 
+  ms_fwd,
+  ms_resetOdo,
+  ms_turn, 
   ms_end
   };
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[100] = { //remember to update the array length!!!!!!!
-  0.5, 0.2, /*fwd_1*/ 
-  1.5, 0.2, 0.0, /*followBlack_1*/ 
-  -90.0 / 180 * M_PI, 0.2, /*turn_1*/
-  2.0, 0.3 /*fwd_1*/
+  //-180.0 / 180 * M_PI, 0.2, //turn 2
+  //-180.0 / 180 * M_PI, 0.2, //turn 2
+  0.5, 0.2, //fwd 1
+  1.5, 0.2, 0.0, //followBlack 1 
+  -90.0 / 180 * M_PI, 0.2, //turn 1
+  2.0, 0.3, //fwd 2
+  -180.0 / 180 * M_PI, 0.2 //turn 2
   }; //number of vars is 7
 //------------------------end of course----------------------------------
 
@@ -424,7 +433,6 @@ int main(int argc, char **argv)
     case ms_fwd:
       if (change_var) 
       {
-        printf("var_i: %d ,", i_var);
         dist = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
         printf("fwd: (%f,%f)\n", i_var, dist, speed);
@@ -443,12 +451,8 @@ int main(int argc, char **argv)
     case ms_turn:
       if (change_var) 
       {
-        printf("var_i: %d\n", i_var);
         angle = course_vars[i_var]; i_var++;
-        printf("angle: %f\n", angle);
-        printf("var_i: %d\n", i_var);
         speed = course_vars[i_var]; i_var++;
-        printf("angle: %f\n", speed);
         printf("turn: (%f,%f)\n", i_var, angle, speed);
         change_var = false;
       }
@@ -553,7 +557,13 @@ void reset_odo(motiontype *p ,odotype *o)
   o->x = 0.0; // can be changed to 0.5
   o->y = 0.0; // can be changed to 2.0
   o->theta = 0.0;
+  //motiontype reset
+  //p->left_pos = 0.0;
+  //p->right_pos = 0.0;
+  //p->startpos = 0.0;
   p->cmd = mot_stop;
+  p->theta_ref = 0;
+
 }
 
 void update_odo(odotype *p)
