@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -56,32 +57,6 @@ getoutputref(const char *sym_name, symTableElement *tab)
   return 0;
 }
 
-/*****************************************
- * odometry
- */
-#define WHEEL_DIAMETER 0.06522 /* m */
-#define WHEEL_SEPARATION 0.26  /* m */
-#define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
-#define DEFAULT_ROBOTPORT 24902
-#define k 0.001
-
-typedef struct
-{                          // input signals
-  int left_enc, right_enc; // encoderticks
-  // parameters
-  double w;      // wheel separation
-  double cr, cl; // meters per encodertick
-                 // output signals
-  double right_pos, left_pos;
-  // internal variables
-  int left_enc_old, right_enc_old;
-  // Odometry
-  double x, y, theta;
-} odotype;
-
-void reset_odo(odotype *p);
-void update_odo(odotype *p);
-
 /********************************************
  * Motion control
  */
@@ -108,6 +83,33 @@ typedef struct
 
 } motiontype;
 
+/*****************************************
+ * odometry
+ */
+#define WHEEL_DIAMETER 0.06522 /* m */
+#define WHEEL_SEPARATION 0.26  /* m */
+#define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
+#define DEFAULT_ROBOTPORT 24902
+#define k 0.001
+
+typedef struct
+{                          // input signals
+  int left_enc, right_enc; // encoderticks
+  // parameters
+  double w;      // wheel separation
+  double cr, cl; // meters per encodertick
+                 // output signals
+  double right_pos, left_pos;
+  // internal variables
+  int left_enc_old, right_enc_old;
+  // Odometry
+  double x, y, theta;
+} odotype;
+
+void reset_odo(motiontype *p, odotype *o);
+void update_odo(odotype *p);
+
+
 enum mot
 {
   mot_stop = 1,
@@ -122,6 +124,7 @@ enum ms
   ms_fwd,
   ms_turn,
   ms_followBlack,
+  ms_resetOdo,
   ms_end
 };
 
@@ -143,9 +146,32 @@ double *calibrate_line(symTableElement *linesensor_values);
 int find_line_min(double *sensor_values, int orientation);
 double line_COM(double *sensor_values);
 
-//deffining the course
-enum ms methods[4] = {ms_fwd, ms_followBlack, ms_turn, ms_end};
-//double vars[5] = {0.5/*fwd_1*/, "ms_followBlack", "ms_turn"};
+//------------------------deffining the course---------------------------
+/*
+fwd(dist, speed)
+turn(angle, speed)
+followBlack(dist, speed, dir)
+resetOdo()
+*/
+
+//methods
+enum ms course_methods[100] = { //remember to update the array length!!!!!!!
+  ms_fwd, 
+  ms_followBlack,
+  ms_resetOdo, 
+  ms_turn,
+  ms_fwd, 
+  ms_end
+  };
+
+//method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
+double course_vars[100] = { //remember to update the array length!!!!!!!
+  0.5, 0.2, /*fwd_1*/ 
+  1.5, 0.2, 0.0, /*followBlack_1*/ 
+  -90.0 / 180 * M_PI, 0.2, /*turn_1*/
+  2.0, 0.3 /*fwd_1*/
+  }; //number of vars is 7
+//------------------------end of course----------------------------------
 
 odotype odo;
 smtype mission;
@@ -194,7 +220,8 @@ void ctrlchandler(int sig)
 
 int main(int argc, char **argv)
 {
-  int n = 0, courseLength = 0, arg, time = 0, opt, calibration;
+  bool change_var; //to change the method variable counter var_i
+  int n = 0, courseLength = 0, i_var = 0, dir = 0, arg, time = 0, opt, calibration;
   double dist = 0, angle = 0, speed = 0, acceleration = 0;
   // install sighandlers
   if (1)
@@ -340,7 +367,7 @@ int main(int argc, char **argv)
   odo.cl = odo.cr;
   odo.left_enc = lenc->data[0];
   odo.right_enc = renc->data[0];
-  reset_odo(&odo);
+  reset_odo(&mot, &odo);
   // printf("position: %f, %f\n", odo.left_pos, odo.right_pos);
   mot.w = odo.w;
 
@@ -385,45 +412,81 @@ int main(int argc, char **argv)
     switch (mission.state)
     {
     case ms_init:
-      n = 3;
+      n = (sizeof(course_methods)/sizeof(course_methods[0]))-1;
       courseLength = n;
-      dist = 0.5;
-      angle = 90.0 / 180 * M_PI;
-      speed = 0.2;
       acceleration = 0.5;
-      mission.state = methods[courseLength-n];; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      mission.state = course_methods[courseLength-n];; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      change_var = 1;
       printf("init end\n");
     break;
     
     //forward
     case ms_fwd:
+      if (change_var) 
+      {
+        printf("var_i: %d ,", i_var);
+        dist = course_vars[i_var]; i_var++;
+        speed = course_vars[i_var]; i_var++;
+        printf("fwd: (%f,%f)\n", i_var, dist, speed);
+        change_var = false;
+      }
       if (fwd(dist, speed, acceleration, mission.time)) 
       {
         n = n-1;
-        dist = 1.5;
-        mission.state = methods[courseLength-n];
+        mission.state = course_methods[courseLength-n];
+        change_var = true;
         printf("fwd end\n");
       }
     break;
 
     //turn
     case ms_turn:
+      if (change_var) 
+      {
+        printf("var_i: %d\n", i_var);
+        angle = course_vars[i_var]; i_var++;
+        printf("angle: %f\n", angle);
+        printf("var_i: %d\n", i_var);
+        speed = course_vars[i_var]; i_var++;
+        printf("angle: %f\n", speed);
+        printf("turn: (%f,%f)\n", i_var, angle, speed);
+        change_var = false;
+      }
       if (turn(angle, speed, mission.time)) 
       {
         n = n-1;
-        mission.state = methods[courseLength-n];
+        mission.state = course_methods[courseLength-n];
+        change_var = true;
         printf("turn end\n");      
       }
     break;
 
     //followBlack
     case ms_followBlack:
-      if(follow(dist, speed, mission.time, 0)) 
+      if (change_var) 
+      {
+        printf("var_i: %d ,", i_var);
+        dist = course_vars[i_var]; i_var++;
+        speed = course_vars[i_var]; i_var++;
+        dir = course_vars[i_var]; i_var++;
+        printf("follow: (%f,%f,%d)\n", dist, speed, dir);
+        change_var = false;
+      }
+      if(follow(dist, speed, mission.time, dir)) 
       {
         n = n-1;
-        mission.state = methods[courseLength-n];
+        mission.state = course_methods[courseLength-n];
+        change_var = true;
         printf("follow end\n");
       }
+    break;
+
+    case ms_resetOdo:
+      reset_odo(&mot, &odo);
+      n = n-1;
+      mission.state = course_methods[courseLength-n];
+      change_var = true;
+      printf("odo reset\n");      
     break;
 
     //end
@@ -436,7 +499,6 @@ int main(int argc, char **argv)
     /*  end of mission  */
 
     // Update odometry
-
     mot.left_pos = odo.left_pos;
     mot.right_pos = odo.right_pos;
     update_motcon(&mot, &odo);
@@ -483,14 +545,15 @@ int main(int argc, char **argv)
  * roll-over has to be detected and corrected.
  */
 
-void reset_odo(odotype *p)
+void reset_odo(motiontype *p ,odotype *o)
 {
-  p->right_pos = p->left_pos = 0.0;
-  p->right_enc_old = p->right_enc;
-  p->left_enc_old = p->left_enc;
-  p->x = 0.0; // can be changed to 0.5
-  p->y = 0.0; // can be changed to 2.0
-  p->theta = 0.0;
+  o->right_pos = o->left_pos = 0.0;
+  o->right_enc_old = o->right_enc;
+  o->left_enc_old = o->left_enc;
+  o->x = 0.0; // can be changed to 0.5
+  o->y = 0.0; // can be changed to 2.0
+  o->theta = 0.0;
+  p->cmd = mot_stop;
 }
 
 void update_odo(odotype *p)
@@ -539,6 +602,7 @@ void update_motcon(motiontype *p, odotype *o)
     case mot_stop:
       p->curcmd = mot_stop;
       break;
+      
     case mot_move:
       p->startpos = (p->left_pos + p->right_pos) / 2;
       p->curcmd = mot_move;
@@ -573,8 +637,6 @@ void update_motcon(motiontype *p, odotype *o)
   int i;
   double com;
 
-  //printf("Linesensor value: %d", linesensor);
-  //printf("Linesensor no of indexes: %d %d %d %d %d %d %d %d \n", linesensor[0].name, linesensor[1], linesensor[2], linesensor[3], linesensor[4], linesensor[5], linesensor[6], linesensor[7]);
   switch (p->curcmd)
   {
   //forward (fwd)
