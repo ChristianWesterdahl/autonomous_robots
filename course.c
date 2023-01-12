@@ -113,6 +113,7 @@ typedef struct
   int linecolor; //0 for black 1 for white
   int orientation;
   bool sensorstop;
+  bool crossingline;
 
 
 } motiontype;
@@ -149,9 +150,11 @@ void sm_update(smtype *p);
 void update_motcon(motiontype *p, odotype *o);
 int fwd(double speed, int time, double dist, bool sensorstop);
 int turn(double angle, double speed, int time);
-int line(double speed, int linecolor, int orientation, int time, double dist, bool sensorstop); // New
+int line(double speed, int linecolor, bool crossingline, int orientation, int time, double dist, bool sensorstop); // New
 int wall(double speed, int orientation, int time, double dist, bool sensorstop); // New
 double *calibrate_line(symTableElement *linesensor_values);
+int find_line_min(double *sensor_values, int orientation, int linecolor);
+bool compare_floats(float f1, float f2);
 
 odotype odo;
 smtype mission;
@@ -672,7 +675,7 @@ void update_motcon(motiontype *p, odotype *o)
 
   case mot_line:
     calibrated_sensorvalues = calibrate_line(linesensor);
-    sensor_index = find_line_min(calibrated_sensorvalues, 0); // 0, hold right, 1 hold left.
+    sensor_index = find_line_min(calibrated_sensorvalues, mot.orientation, mot.linecolor); // 0, hold right, 1 hold left.
     
     remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
     max_V = sqrt(2*0.5*fabs(remaining_dist));
@@ -682,6 +685,21 @@ void update_motcon(motiontype *p, odotype *o)
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) |  mot.sensorstop)
     {
       p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
+
+    // Stop if meeting af crossling line of any color
+    if (mot.crossingline && (sensor_index == -1))
+    {
+      p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
+
+    if (sensor_index == -2)
+    {
+      printf("Error! - DO SOMETHING!");
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
     }
@@ -708,7 +726,7 @@ void update_motcon(motiontype *p, odotype *o)
     else if (delta_V < 0) p->motorspeed_l += delta_V; //Delta in this case is negative, we should decrease speed on left wheel
     
     // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
-    else if (delta_V > 0) p->motorspeed_r -= delta_V // Delta in this case is positive, we should decrease speed on right wheel
+    else if (delta_V > 0) p->motorspeed_r -= delta_V; // Delta in this case is positive, we should decrease speed on right wheel
     break;
   
   case mot_wall:
@@ -755,13 +773,14 @@ int turn(double angle, double speed, int time)
     return mot.finished;
 }
 
-int line(double speed, int linecolor, int orientation, int time, double dist, bool sensorstop)
+int line(double speed, int linecolor, bool crossingline, int orientation, int time, double dist, bool sensorstop)
 {
   if (time == 0)
   {
     mot.cmd = mot_line;
     mot.speedcmd = speed;
     mot.linecolor = linecolor;
+    mot.crossingline = crossingline;
     mot.dist = dist;
     mot.sensorstop = sensorstop;
     mot.orientation = orientation;
@@ -802,49 +821,78 @@ double *calibrate_line(symTableElement *linesensor_values)
   return readings;
   }
 
-int find_line_min(double *sensor_values, int orientation)
+int find_line_min(double *sensor_values, int orientation, int linecolor)
 {
   // This function finds the position of the black line 
   // using the position of the lowest calibrated linesensor.
   // Note that we need to loop backwards over the values
 
-  double curr_min = 1.0;
-  int chosen_index;
+  int chosen_index = -2;
   int i;
   int all_equal = 1;
-  double sum;
+  double sum = 0.0;
 
-  // Loop backwards over the input array of sensor values:
-  for (i=7; i--> 0;)
+  if (linecolor == 0)
   {
-    if (orientation == 0)
+    int curr_min = 1.0;
+    // Loop backwards over the input array of sensor values:
+    for (i=7; i--> 0;)
     {
-      if (sensor_values[i] < curr_min)
+      if (orientation == 0)
       {
-        curr_min = sensor_values[i];
-        chosen_index = i;
+        if (sensor_values[i] < curr_min)
+        {
+          curr_min = sensor_values[i];
+          chosen_index = i;
+        }
       }
+      else
+      {
+        if (sensor_values[i] <= curr_min)
+        {
+          curr_min = sensor_values[i];
+          chosen_index = i;
+        }
+      }
+      // Finally we desire to check if all the sensor values are the same
+      sum += sensor_values[i];
     }
-    else
+  }
+  else if (linecolor == 1)
+  {
+    int curr_max = 0.0;
+    // Loop backwards over the input array of sensor values:
+    for (i=7; i--> 0;)
     {
-      if (sensor_values[i] <= curr_min)
+      if (orientation == 0)
       {
-        curr_min = sensor_values[i];
-        chosen_index = i;
+        if (sensor_values[i] > curr_max)
+        {
+          curr_max = sensor_values[i];
+          chosen_index = i;
+        }
       }
+      else
+      {
+        if (sensor_values[i] >= curr_max)
+        {
+          curr_max = sensor_values[i];
+          chosen_index = i;
+        }
+      }
+      // Finally we desire to check if all the sensor values are the same
+      sum += sensor_values[i];
     }
-    // Finally we desire to check if all the sensor values are the same
-    sum += sensor_values[i];
   }
   for (i = 0; i<8; i++)
   {
     if (compare_floats(sum/8.0, sensor_values[i]))
     {
-      all_equal * 1;
+      all_equal *= 1;
     }
-    else all_equal * 0;
+    else all_equal *= 0;
   }
-  if (all_equal = 1) return -1;
+  if (all_equal == 1) return -1;
   else return chosen_index; 
 }
 
