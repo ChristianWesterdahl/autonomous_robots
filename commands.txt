@@ -1,0 +1,6 @@
+forward(speed, dist, sensorstop)
+turn(speed, orientation) %Eventually more statements
+followline(speed, orientation, dist, sensorstop)
+followwall(speed, orientation, walldist, dist, sensorstopr)
+
+Where "sensorstop" are some boolean statement, ie. (readdist(ir0) == 10) 
