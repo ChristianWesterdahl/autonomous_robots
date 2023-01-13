@@ -160,7 +160,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(char *sensor, double condition, int mode);
-double readsensor(char *sensor);
+double readsensor(int sensor);
 
 //------------------------deffining the course---------------------------
 /*
@@ -803,7 +803,7 @@ void update_motcon(motiontype *p, odotype *o)
 
     if (mot.followDir == 0) //If 0 then keep wall to left
     {
-      sensor_value = readsensor('r0');
+      sensor_value = readsensor(10);
       v_delta = 0.1*(mot.walldist - sensor_value); // If this is negative, robot is too far from wall, if positive too close. It should be zero.
 
       // From here we utilize the same code as for the linesensor
@@ -850,7 +850,7 @@ void update_motcon(motiontype *p, odotype *o)
     }
     else if (mot.followDir == 1) //If 1 then keep wall to right
     {
-      sensor_value = readsensor('r5');
+      sensor_value = readsensor(14);
       v_delta = 0.1*(mot.walldist - sensor_value); // If this is negative, robot is too far from wall, if positive too close. It should be zero.
 
       // From here we utilize the same code as for the linesensor
@@ -1105,24 +1105,20 @@ bool sensorstop(char *sensor, double condition, int mode)
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
 }
 
-double readsensor(char *sensor)
+double readsensor(int sensor)
 {
   // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor 
-  if (sensor == 'N') return false;
-
-  int index;
+  // if (sensor == 'N') return false;
   double sensor_value;
-  if (sensor[0] == 'l')
+  if (sensor < 10)
   {
-    sscanf(sensor[1], "%d", &index);
     // Get value from sensor
-    sensor_value = laserpar[index];
+    sensor_value = laserpar[sensor];
   }
-  else if (sensor[0] == 'r')
+  else if (sensor >= 10)
   {
-    sscanf(sensor[1], "%d", &index);
     // Get value from sensor
-    sensor_value = irsensor->data[index];
+    sensor_value = irsensor->data[sensor-10];
     sensor_value = (KA)/(sensor_value - KB);
   }
   return sensor_value;
