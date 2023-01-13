@@ -741,45 +741,6 @@ void update_motcon(motiontype *p, odotype *o)
     break;
   
   //------------------------following line------------------------------------------
-  /*
-  //old line method
-  case mot_line:
-      calibrated_values = calibrate_line(linesensor);
-      sensor_index = find_line_min(calibrated_values, p->followDir); //0, keeps left, 1 keeps right.
-      com = line_COM(calibrated_values);
-      remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
-      v_max = p->speedcmd;
-      v_delta = 0.01 * (3-sensor_index); // This version works with sensor index
-      // This version works with com
-      //  Have we reached
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | sensor_index == -1)
-      {
-        p->finished = 1;
-        p->motorspeed_l = 0;
-        p->motorspeed_r = 0;
-        break;
-      }
-      if (v_max < fabs(p->motorspeed_l))
-      {
-        p->motorspeed_l = v_max;
-      }
-      if (v_max < fabs(p->motorspeed_r))
-      {
-        p->motorspeed_r = v_max;
-      }
-      if (v_delta == 0) { //Use this for sensor
-      //if (v_delta <= 0.001 && v_delta >= -0.001) { //If we are straight on the line, then full speed ahead! (use this for com)
-        p->motorspeed_l = v_max;
-        p->motorspeed_r = v_max;
-      }
-      else if (v_delta < 0){ // Large sensor index, turn right
-        p->motorspeed_r += v_delta;
-      }
-      else if (v_delta > 0){ // Small sensor index, turn left
-        p->motorspeed_l -= v_delta;
-      }
-    break;
-  */
 
   case mot_line:
       calibrated_sensorvalues = calibrate_line(linesensor);
@@ -791,7 +752,7 @@ void update_motcon(motiontype *p, odotype *o)
       
       printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
       // Check if destination is reached or sensors tell motor to stop.
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) |  mot.sensorstop)
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
       {
         p->finished = 1;
         p->motorspeed_l = 0;
@@ -930,40 +891,6 @@ double *calibrate_line(symTableElement *linesensor_values)
   }
   return r;
 }
-/*
-//old find_line_min method
-int find_line_min(double *sensor_values, int orientation)
-{
-  // This function finds the position of the black line using the position of the
-  // lowest calibrated linesensor.
-  double curr_min = 1.0;
-  int index;
-  int i;
-  int all_same = 1;
-  for (i=7; i --> 0;){ //reverse loop
-    if (orientation == 0) {
-      if (sensor_values[i] < curr_min) {
-        curr_min = sensor_values[i];
-        index = 7-i;
-      }
-    }
-    else if (orientation == 1){
-      if (sensor_values[i] <= curr_min) {
-        curr_min = sensor_values[i];
-        index = 7-i;
-      }
-    }
-    if (i<7 && (sensor_values[i+1] == sensor_values[i])){
-      all_same *=1;
-    }
-    else if (i<7 && (sensor_values[i+1] != sensor_values[i])) {
-      all_same *= 0;
-    }
-  }
-  if (all_same == 1) return -1;
-  else return index;
-}
-*/
 
 int find_line_min(double *sensor_values, int orientation, int linecolor)
 {
@@ -1098,3 +1025,9 @@ bool sensorstop(char *sensor, double condition, int mode)
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
 }
+
+//double readsensor(char *sensor)
+//{
+//  if (sensor == 'N') return -100.0;
+//
+//}
