@@ -163,34 +163,19 @@ fwd(dist, speed)
 turn(angle, speed)
 line(dist, speed, col, crossingLine, dir, sen)
 resetOdo()
+measure(laser_compensation)
 */
 
 //methods
-enum ms course_methods[100] = { //remember to update the array length!!!!!!!
-  //ms_turn,
-  //ms_resetOdo,
-  //ms_turn,
-  //ms_resetOdo,
-  ms_fwd, 
-  ms_line,
-  ms_resetOdo, 
-  ms_turn,
-  ms_fwd,
-  ms_resetOdo,
-  ms_turn, 
+enum ms course_methods[500] = {
+  //course here
   ms_end
   };
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
-double course_vars[100] = { //remember to update the array length!!!!!!!
-  //-180.0 / 180 * M_PI, 0.2, //turn 2
-  //-180.0 / 180 * M_PI, 0.2, //turn 2
-  0.5, 0.2, //fwd 1
-  1.5, 0.2, 0.0, //followBlack 1 
-  -90.0 / 180 * M_PI, 0.2, //turn 1
-  2.0, 0.3, //fwd 2
-  -180.0 / 180 * M_PI, 0.2 //turn 2
-  }; //number of vars is 7
+double course_vars[500] = {
+  //course variables here
+  }; 
 //------------------------end of course----------------------------------
 
 odotype odo;
@@ -374,7 +359,6 @@ int main(int argc, char **argv)
     {
       xmllaser = xml_in_init(4096, 32);
       printf(" laserserver xml initialized \n");
-      //len = sprintf(buf, "push  t=0.2 cmd='mrcobst width=0.4'\n");
       len=sprintf(buf,"scanpush cmd='zoneobst'\n");
       send(lmssrv.sockfd, buf, len, 0);
     }
@@ -389,7 +373,6 @@ int main(int argc, char **argv)
   odo.left_enc = lenc->data[0];
   odo.right_enc = renc->data[0];
   reset_odo(&mot, &odo);
-  // printf("position: %f, %f\n", odo.left_pos, odo.right_pos);
   mot.w = odo.w;
 
   // zero theoretical angle:
@@ -436,7 +419,7 @@ int main(int argc, char **argv)
       n = (sizeof(course_methods)/sizeof(course_methods[0]))-1;
       courseLength = n;
       acceleration = 0.5;
-      mission.state = course_methods[courseLength-n];; // Change between ms_fwd for square or straightline program, or ms_followline for followline program.
+      mission.state = course_methods[courseLength-n];
       change_var = 1;
     break;
     
@@ -564,13 +547,9 @@ void reset_odo(motiontype *p ,odotype *o)
   o->right_pos = o->left_pos = 0.0;
   o->right_enc_old = o->right_enc;
   o->left_enc_old = o->left_enc;
-  o->x = 0.0; // can be changed to 0.5
-  o->y = 0.0; // can be changed to 2.0
+  o->x = 0.0;
+  o->y = 0.0; 
   o->theta = 0.0;
-  //motiontype reset
-  //p->left_pos = 0.0;
-  //p->right_pos = 0.0;
-  //p->startpos = 0.0;
   p->cmd = mot_stop;
   p->theta_ref = 0;
 
@@ -607,8 +586,8 @@ void update_odo(odotype *p)
   delta_theta = (delta_right - delta_left) / WHEEL_SEPARATION;
 
   p->theta = p->theta + delta_theta;
-  p->x = p->x + delta_U * cos(p->theta / 180 * M_PI);
-  p->y = p->y + delta_U * sin(p->theta / 180 * M_PI);
+  p->x = p->x + delta_U * cos(p->theta / 180 * M_PI); //might be changed to use radiends on some systems
+  p->y = p->y + delta_U * sin(p->theta / 180 * M_PI); //might be changed to use radiends on some systems
 }
 
 void update_motcon(motiontype *p, odotype *o)
@@ -652,7 +631,6 @@ void update_motcon(motiontype *p, odotype *o)
   double angular_distance;
   
   // Custom values for follow_line sensor functionality
-  //double *calibrated_values;  //old line follow
   double *calibrated_sensorvalues;
   int sensor_index;
   int i;
@@ -660,7 +638,7 @@ void update_motcon(motiontype *p, odotype *o)
 
   switch (p->curcmd)
   {
-  //forward (fwd)
+  //-----------------------------------------------forward---------------------------------------
   case mot_move:
     
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || mot.sensorstop)
@@ -699,14 +677,8 @@ void update_motcon(motiontype *p, odotype *o)
   //------------------------------------turning-----------------------------------
   case mot_turn:
     angular_distance = p->theta_ref - o->theta;
-    //printf("Angular Distance: %f \n", angular_distance);
     if (angular_distance > 0 && angular_distance <= M_PI)
     { // If we have to turn left (the angle is less than 180 degrees and postiive)
-      //printf("TURNIG LEFT\n");
-      //printf("ANGLE: %f \n", p->theta_ref);
-      //printf("Theta_angle: %f \n", o->theta);
-      // printf("Left velocity: %f \n", p->motorspeed_l);
-      // printf("Right velocity: %f \n", p->motorspeed_r);
       if (angular_distance > 0.5 / 180 * M_PI)
       { // Condition suff small keep turning
         p->motorspeed_r = p->motorspeed_r + k * angular_distance;
@@ -722,9 +694,6 @@ void update_motcon(motiontype *p, odotype *o)
     }
     else
     { // Else we turn right
-      //printf("TURNING RIGHT\n");
-      //printf("ANGLE*: %f \n", p->theta_ref);
-      //printf("Theta_angle: %f \n", o->theta);
       if (angular_distance < -0.5 / 180 * M_PI)
       {
         p->motorspeed_l = p->motorspeed_l - k * angular_distance;
@@ -1025,9 +994,3 @@ bool sensorstop(char *sensor, double condition, int mode)
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
 }
-
-//double readsensor(char *sensor)
-//{
-//  if (sensor == 'N') return -100.0;
-//
-//}
