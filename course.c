@@ -155,6 +155,7 @@ double *calibrate_line(symTableElement *linesensor_values);
 int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
+bool sensorstop(char *sensor, double condition, int mode);
 
 //------------------------deffining the course---------------------------
 /*
@@ -373,7 +374,8 @@ int main(int argc, char **argv)
     {
       xmllaser = xml_in_init(4096, 32);
       printf(" laserserver xml initialized \n");
-      len = sprintf(buf, "push  t=0.2 cmd='mrcobst width=0.4'\n");
+      //len = sprintf(buf, "push  t=0.2 cmd='mrcobst width=0.4'\n");
+      len=sprintf(buf,"scanpush cmd='zoneobst'\n");
       send(lmssrv.sockfd, buf, len, 0);
     }
   }
@@ -447,6 +449,7 @@ int main(int argc, char **argv)
         printf("fwd: (%f,%f)\n", i_var, dist, speed);
         change_var = false;
       }
+      mot.sensorstop = sensorstop("r0", 10.0, 0); // Replace with course_vars[];
       if (fwd(dist, speed, acceleration, 0, mission.time)) 
       {
         n = n-1;
@@ -483,6 +486,7 @@ int main(int argc, char **argv)
         printf("follow: (%f,%f,%d)\n", dist, speed, dir);
         change_var = false;
       }
+      mot.sensorstop = sensorstop("r0", 10.0, 0);
       if(line(dist, speed, dir, 0, false, false, mission.time)) 
       {
         n = n-1;
@@ -659,7 +663,7 @@ void update_motcon(motiontype *p, odotype *o)
   //forward (fwd)
   case mot_move:
     
-    if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0)
+    if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || mot.sensorstop)
     {  
       p->finished = 1;
       p->motorspeed_l = 0;
@@ -783,7 +787,7 @@ void update_motcon(motiontype *p, odotype *o)
       
       remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
       v_max = sqrt(2*0.5*fabs(remaining_dist));
-      v_delta = 0.005 * (3-sensor_index);
+      v_delta = 0.0005 * (3-sensor_index);
       
       printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
       // Check if destination is reached or sensors tell motor to stop.
@@ -1068,4 +1072,29 @@ bool compare_floats(float f1, float f2)
   {
     return false;
   }
+}
+
+bool sensorstop(char *sensor, double condition, int mode)
+{
+  // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor
+  if (sensor == 'N') return false;
+
+  int index;
+  double sensor_value;
+  if (sensor[0] == 'l')
+  {
+    sscanf(sensor[1], "%d", &index);
+    // Get value from sensor
+    sensor_value = laserpar[index];
+  }
+  else if (sensor[0] == 'r')
+  {
+    sscanf(sensor[1], "%d", &index);
+    // Get value from sensor
+    sensor_value = irsensor->data[index];
+  }
+
+  // Now check if condition is true given the values
+  if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
+  else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
 }
