@@ -130,6 +130,7 @@ enum ms
   ms_turn,
   ms_line,
   ms_resetOdo,
+  ms_measure,
   ms_wall,
   ms_end
 };
@@ -140,20 +141,20 @@ typedef struct
   int time;
 } smtype;
 
-/********************************************
- * Custom Headers
- */
 void sm_update(smtype *p);
+
 void update_motcon(motiontype *p, odotype *o);
+
 int fwd(double dist, double speed, double acceleration, bool sensorstop, int time);
 int turn(double angle, double speed, int time);
 //int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 int line(double dist, double speed, int dir, int linecolor, bool crossingline, bool sensorstop, int time); // New
+double take_measurement(double laser_compensation);
 int wall(double speed, int orientation, int time, double dist, bool sensorstop); // New
 //auxilory function (all new)
 double *calibrate_line(symTableElement *linesensor_values);
-int find_line_min(double *sensor_values, int orientation); //old follow line
-//int find_line_min(double *sensor_values, int orientation, int linecolor); //new follow line method
+//int find_line_min(double *sensor_values, int orientation); old follow line
+int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 
@@ -161,36 +162,28 @@ double line_COM(double *sensor_values);
 /*
 fwd(dist, speed)
 turn(angle, speed)
-line(dist, speed, col, crossingLine, dir, sen)
+line(dist, speed, dir, linecolor, //crossingline, sensorstop)
 resetOdo()
 */
 
 //methods
 enum ms course_methods[100] = { //remember to update the array length!!!!!!!
-  //ms_turn,
-  //ms_resetOdo,
-  //ms_turn,
-  //ms_resetOdo,
-  ms_fwd, 
-  ms_line,
-  ms_resetOdo, 
-  ms_turn,
+  //ms_line,
   ms_fwd,
-  ms_resetOdo,
-  ms_turn, 
-  ms_end
-  };
+  ms_measure,
+  ms_fwd,
+  ms_measure,
+  ms_end  
+};
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[100] = { //remember to update the array length!!!!!!!
-  //-180.0 / 180 * M_PI, 0.2, //turn 2
-  //-180.0 / 180 * M_PI, 0.2, //turn 2
-  0.5, 0.2, //fwd 1
-  1.5, 0.2, 0.0, //followBlack 1 
-  -90.0 / 180 * M_PI, 0.2, //turn 1
-  2.0, 0.3, //fwd 2
-  -180.0 / 180 * M_PI, 0.2 //turn 2
-  }; //number of vars is 7
+  //0.7, 0.2, 1, 0, //followBlack 1 
+  0.01, 0.2,
+  0.0, //laser compensation
+  0.1, 0.2,
+  0.0
+}; 
 //------------------------end of course----------------------------------
 
 odotype odo;
@@ -237,11 +230,10 @@ void ctrlchandler(int sig)
 * |_|  |_/_/    \_\_____|_| \_| *
 *                               *
 *********************************/
-
 int main(int argc, char **argv)
 {
   bool change_var; //to change the method variable counter var_i
-  int n = 0, courseLength = 0, i_var = 0, dir = 0, arg, time = 0, opt, calibration;
+  int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration;
   double dist = 0, angle = 0, speed = 0, acceleration = 0;
   // install sighandlers
   if (1)
@@ -374,7 +366,8 @@ int main(int argc, char **argv)
     {
       xmllaser = xml_in_init(4096, 32);
       printf(" laserserver xml initialized \n");
-      len = sprintf(buf, "push  t=0.2 cmd='mrcobst width=0.4'\n");
+      //len = sprintf(buf, "push  t=0.2 cmd='mrcobst width=0.4'\n");
+      len = sprintf(buf, "scanpush cmd='zoneobst'\n");
       send(lmssrv.sockfd, buf, len, 0);
     }
   }
@@ -428,6 +421,7 @@ int main(int argc, char **argv)
     /****************************************
     / mission statemachine
     */
+    //printf("laser values: 0-%f 1-%f 2-%f 3-%f 4-%f 5-%f 6-%f 7-%f 8-%f\n", laserpar[0],laserpar[1],laserpar[2],laserpar[3],laserpar[4],laserpar[5],laserpar[6],laserpar[7],laserpar[8]);
     sm_update(&mission);
     switch (mission.state)
     {
@@ -477,14 +471,14 @@ int main(int argc, char **argv)
     case ms_line:
       if (change_var) 
       {
-        printf("var_i: %d ,", i_var);
         dist = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
         dir = course_vars[i_var]; i_var++;
-        printf("follow: (%f,%f,%d)\n", dist, speed, dir);
+        linecolor = course_vars[i_var]; i_var++;
+        printf("follow: (%f,%f,%d, %d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
-      if(line(dist, speed, dir, 0, false, false, mission.time)) 
+      if(line(dist, speed, dir, linecolor, false, false, mission.time)) //line(dist, speed, dir, linecolor, crossingline, sensorstop)
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
@@ -498,6 +492,13 @@ int main(int argc, char **argv)
       mission.state = course_methods[courseLength-n];
       change_var = true;
       printf("odo reset\n");      
+    break;
+
+    case ms_measure:
+      n = n-1;
+      mission.state = course_methods[courseLength-n];
+      printf("distance to box: %f\n", take_measurement(course_vars[i_var]));
+      i_var++;
     break;
 
     //end
@@ -556,28 +557,25 @@ int main(int argc, char **argv)
  * roll-over has to be detected and corrected.
  */
 
-void reset_odo(motiontype *p ,odotype *o)
+void reset_odo(motiontype *p, odotype *o)
 {
   o->right_pos = o->left_pos = 0.0;
   o->right_enc_old = o->right_enc;
   o->left_enc_old = o->left_enc;
-  o->x = 0.0; // can be changed to 0.5
-  o->y = 0.0; // can be changed to 2.0
+  //resetting odometry
+  o->x = 0.0;
+  o->y = 0.0;
   o->theta = 0.0;
-  //motiontype reset
-  //p->left_pos = 0.0;
-  //p->right_pos = 0.0;
-  //p->startpos = 0.0;
   p->cmd = mot_stop;
   p->theta_ref = 0;
-
 }
 
 void update_odo(odotype *p)
 {
   int delta;
-  double delta_right; // The delta is the N_r or N_l (encoder output count)
-  double delta_left;
+  //odometry variables
+  double delta_right; //this is N_r
+  double delta_left;  //this is N_l
   double delta_U;
   double delta_theta;
 
@@ -587,8 +585,8 @@ void update_odo(odotype *p)
   else if (delta < -0x8000)
     delta += 0x10000;
   p->right_enc_old = p->right_enc;
+  p->right_pos += delta * p->cr;
   delta_right = delta * p->cr;
-  p->right_pos += delta_right;
 
   delta = p->left_enc - p->left_enc_old;
   if (delta > 0x8000)
@@ -596,16 +594,16 @@ void update_odo(odotype *p)
   else if (delta < -0x8000)
     delta += 0x10000;
   p->left_enc_old = p->left_enc;
+  p->left_pos += delta * p->cl;
   delta_left = delta * p->cl;
-  p->left_pos += delta_left;
 
-  // Update odometry measures x, y, theta
-  delta_U = (delta_right + delta_left) / 2.0; // Note that right pos and left pos constitues delta U_r and delta U_l
-  delta_theta = (delta_right - delta_left) / WHEEL_SEPARATION;
+  //updating odometry
+  delta_U = (delta_right + delta_left)/2.0;
+  delta_theta = (delta_right - delta_left)/WHEEL_SEPARATION;
 
-  p->theta = p->theta + delta_theta;
-  p->x = p->x + delta_U * cos(p->theta / 180 * M_PI);
-  p->y = p->y + delta_U * sin(p->theta / 180 * M_PI);
+  p->theta = p->theta+delta_theta;
+  p->x = p->x + delta_U*cos(p->theta);
+  p->y = p->y + delta_U*sin(p->theta);
 }
 
 void update_motcon(motiontype *p, odotype *o)
@@ -649,8 +647,8 @@ void update_motcon(motiontype *p, odotype *o)
   double angular_distance;
   
   // Custom values for follow_line sensor functionality
-  double *calibrated_values;  //old line follow
-  //double *calibrated_sensorvalues;
+  //double *calibrated_values;  //old line follow
+  double *calibrated_sensorvalues;
   int sensor_index;
   int i;
   double com;
@@ -738,56 +736,15 @@ void update_motcon(motiontype *p, odotype *o)
     break;
   
   //------------------------following line------------------------------------------
-  
-  //old line method
-  case mot_line:
-      calibrated_values = calibrate_line(linesensor);
-      sensor_index = find_line_min(calibrated_values, p->followDir); //0, keeps left, 1 keeps right.
-      com = line_COM(calibrated_values);
-      remaining_dist = p->dist - ((p->right_pos + p->left_pos) / 2 - p->startpos);
-      v_max = p->speedcmd;
-      v_delta = 0.01 * (3-sensor_index); // This version works with sensor index
-      // This version works with com
-      //  Have we reached
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | sensor_index == -1)
-      {
-        p->finished = 1;
-        p->motorspeed_l = 0;
-        p->motorspeed_r = 0;
-        break;
-      }
-      if (v_max < fabs(p->motorspeed_l))
-      {
-        p->motorspeed_l = v_max;
-      }
-      if (v_max < fabs(p->motorspeed_r))
-      {
-        p->motorspeed_r = v_max;
-      }
-      if (v_delta == 0) { //Use this for sensor
-      //if (v_delta <= 0.001 && v_delta >= -0.001) { //If we are straight on the line, then full speed ahead! (use this for com)
-        p->motorspeed_l = v_max;
-        p->motorspeed_r = v_max;
-      }
-      else if (v_delta < 0){ // Large sensor index, turn right
-        p->motorspeed_r += v_delta;
-      }
-      else if (v_delta > 0){ // Small sensor index, turn left
-        p->motorspeed_l -= v_delta;
-      }
-    break;
-  
-
-  /*
   case mot_line:
       calibrated_sensorvalues = calibrate_line(linesensor);
       sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
       
       remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
       v_max = sqrt(2*0.5*fabs(remaining_dist));
-      v_delta = 0.01 * (3-sensor_index);
+      v_delta = 0.0005 * (3-sensor_index);
       
-      printf("snesor index: %d, v_delta: %f, orientation: %d\n", sensor_index, v_delta, p->followDir);
+      //printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
       // Check if destination is reached or sensors tell motor to stop.
       if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) |  mot.sensorstop)
       {
@@ -830,12 +787,19 @@ void update_motcon(motiontype *p, odotype *o)
         }
       }
       // If less than 0, this means the sensor index is large (ie. to the left, and we should turn this way)
-      else if (v_delta < 0) p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
-      
+      else if (v_delta < 0) 
+      {
+        p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
+        p->motorspeed_r -= v_delta;
+      }
       // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
-      else if (v_delta > 0) p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
+      else if (v_delta > 0)
+      {
+        p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
+        p->motorspeed_l += v_delta;
+      }
+      //printf("Motorspeeds: l - %f, r - %f\n", p->motorspeed_l, p->motorspeed_r);
       break;
-    */
 
   //------------------------------------------stopping-------------------------------------------
   case mot_stop:
@@ -921,7 +885,7 @@ double *calibrate_line(symTableElement *linesensor_values)
   }
   return r;
 }
-
+/*
 //old find_line_min method
 int find_line_min(double *sensor_values, int orientation)
 {
@@ -954,8 +918,8 @@ int find_line_min(double *sensor_values, int orientation)
   if (all_same == 1) return -1;
   else return index;
 }
+*/
 
-/*
 int find_line_min(double *sensor_values, int orientation, int linecolor)
 {
   // This function finds the position of the black line 
@@ -969,9 +933,9 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
 
   if (linecolor == 0)
   {
-    int curr_min = 1.0;
+    double curr_min = 1.0;
     // Loop backwards over the input array of sensor values:
-    for (i=7; i--> 0;)
+    for (i=8; i--> 0;)
     {
       if (orientation == 0)
       {
@@ -995,10 +959,11 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
   }
   else if (linecolor == 1)
   {
-    int curr_max = 0.0;
+    double curr_max = 0.0;
     // Loop backwards over the input array of sensor values:
-    for (i=7; i--> 0;)
+    for (i=8; i--> 0;)
     {
+      printf(", %f", sensor_values[i]);
       if (orientation == 0)
       {
         if (sensor_values[i] > curr_max)
@@ -1018,6 +983,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       // Finally we desire to check if all the sensor values are the same
       sum += sensor_values[i];
     }
+    printf("\n");
   }
   for (i = 0; i<8; i++)
   {
@@ -1028,9 +994,11 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     else all_equal *= 0;
   }
   if (all_equal == 1) return -1;
-  else return chosen_index; 
+  else 
+  {
+    return chosen_index; 
+  }
 }
-*/
 
 double line_COM(double *sensor_values)
 {
@@ -1059,4 +1027,18 @@ bool compare_floats(float f1, float f2)
   {
     return false;
   }
+}
+
+double take_measurement(double laser_compensation) 
+{
+  printf("laser values: 0-%f 1-%f 2-%f 3-%f 4-%f 5-%f 6-%f 7-%f 8-%f\n", laserpar[0],laserpar[1],laserpar[2],laserpar[3],laserpar[4],laserpar[5],laserpar[6],laserpar[7],laserpar[8]);
+  double laserDist = 1000;
+  int index;
+  int i;
+  for (i = 0; i < 9; i++)
+  {
+    if (laserpar[i] < laserDist) {laserDist = laserpar[i]; index = i;};
+  }
+  printf("laser dist: %f, laser index: %f\n", laserDist, index);
+  return laser_compensation + (-odo.y) + laserDist + 0.265;
 }
