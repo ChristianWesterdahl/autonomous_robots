@@ -1,121 +1,122 @@
-laser "scanpush cmd='zoneobst' "
 %%% initialize the laser module
-%%% final track simulation
+laser "scanpush cmd='zoneobst' "
 
-%%% X-distance measurement from start to box
-xodotoirsensor = 0.274
-followline "br" @v 0.2 :($drivendist > 1.55 | $irdistfrontmiddle <= 0.4)
-stop
-eval $irdistfrontmiddle
-wait 1
-%%% Use laser sensor to measure distance to box
-x = $odox + xodotoirsensor + $l4
-eval x
-eval $l4
+%%% FINAL TRACK SIMULATION
 
-%%% Box gate
+%Use laser to measure x-distance
+followline "bl" @v 0.25:($drivendist >= 0.01)
+followline "bl" :($l7 >= 1.5)
+eval sin(1.222)*$l8
 
-% Move to the box
-turn 90 @v 0.2
-drive :($blacklinefound == 1)
-followline "bm" @v 0.2:($motionstatus == 1)
+%Move to box
+followline "bl" @v 0.25:($motionstatus == 1)
 ignoreobstacles
-drive @v 0.2:($crossingblackline == 1)
+drive @v 0.5:($crossingblackline == 1)
 ignoreobstacles
 fwd 0.15
 
 % Go backwards and pass the gate
-fwd -1 @v -0.3 
+fwd -1  
 turn -90 @v 0.2
 drive :($crossingblackline == 1)
 $crossingblackline = 0
-followline "bl" :($crossingblackline == 1)
-$crossingblackline = 0
 turnr 0.1 75
-followline "bm" :($crossingblackline == 1)
-fwd 0.25
+followline "bm" @v 0.5:($crossingblackline == 1)
+fwd 0.25 @v 0.2
 turn 90
 $crossingblackline = 0
 ignoreobstacles
-followline "bm" :($crossingblackline == 1)
+followline "bm" @v 0.5:($crossingblackline == 1)
 ignoreobstacles
 fwd 0.1
 ignoreobstacles
-followline "br" @v 0.3 :($crossingblackline == 1)
+followline "bm" @v 0.35:($crossingblackline == 1)
 
 %%%%% THIS WORKS
 
-speed = 0.2
-% Use distdriven but laser should be a better solution
-followline "bm" @v speed :($irdistleft <= 0.5)
-fwd 0.4
+% Drive until first gate
+followline "bm" @v 0.2 :($l0 <= 0.75)
+x01 = $odox
+followline "bm" :($l0 >= 0.75)
+x02 = $odox
+x0 = x01 + ((x02-x01)/2)
+followline "bm" :($l0 <= 0.75)
+x11 = $odox
+followline "bm" :($l0 >= 0.75)
+x12 = $odox
+x1 = x11 + ((x12-x11)/2)
+dist = abs((x1-x0)/2)
+drive @v -0.2:($drivendist >= (abs((x12-x11)/2)+dist-0.15))
 turn 90
 
-%drive until wall and turn 
-drive @v speed :($irdistfrontmiddle <= 0.2)
+% Drive until wall and turn 
+ignoreobstacles
+drive @v 0.3 :($l4 <= 0.2)
 turn 90
 
-followwall "r" 0.3 @v 0.2 :($irdistright >= 0.5)
-fwd 0.4
+% Follow the wall until finding second gate
+xdisttogate = sin(1.222)*$l8
+followwall "r" 0.30 @v 0.2 :($l8 >= 0.5)
+x0 = $odox
+drive :($l8 <= 0.5)
+x11 = $odox
+drive :($l8 >= 0.5)
+x12 = $odox
+x1 = x11 + ((x12-x11)/2)
+dist = abs((x1-x0)/2)
+drive @v -0.2:($drivendist >= (abs((x12-x11)/2)+dist-0.15))
 
-% Turn and drive though the first wall gate
-turn -90
-fwd 0.75
+% Turn and drive though the second gate
+ignoreobstacles
+turn -90 @v 0.2
+drive :($drivendist >= (xdisttogate+0.30))
 turn -90
 
 % Follow the out side of the wall.
-fwd 0.25 @v speed
-followwall "r" 0.25 @v 0.2 :($irdistright >= 0.5)
-drive @v speed :($crossingblackline == 1)
+fwd 0.25 @v 0.2
+followwall "r" 0.3 @v 0.4 :($l8 >= 0.5)
+drive :($crossingblackline == 1)
 $crossingblackline = 0
 
-% Turn and drive though the second wall gate
-fwd 0.2 @v speed
+% Turn and drive through the third gate
+fwd 0.15 @v 0.2
 turn -90
-followline "bm" :($drivendist >= 0.75)
+followline "bm" @v 0.4:($drivendist >= 0.75)
 
 % turn around
-turn -180
+turn -180 @v 0.2
+ignoreobstacles
 
-
-followline "bm" @v 0.2:($crossingblackline == 1)
-
-%Move to white line and pass 2 more gates
+% Follow line until white line
+followline "bm" @v 0.4:($crossingblackline == 1)
 $blacklinefound =0
 followline "bm" :($drivendist >=0.5 & $blacklinefound == 0)
-turn 15
-followline "wm" :($crossingblackline == 1)
+turn 30
 
+%Move to white line and pass 2 more gates
+followline "wm" @v 0.3:($crossingblackline == 1)
 
 % Go to garage
-turnr 0.2 -75
-followline "bm" @v 0.2 :($crossingblackline == 1)
+turnr 0.2 -75 @v 0.2
+followline "bm" @v 0.4 :($crossingblackline == 1)
 ignoreobstacles
-followline "bm" :($drivendist >= 0.2)
+followline "bm" @v 0.2:($l4 <= 0.2)
 
 % Open the door
-turn 90
-drive :($irdistright >= 0.5)
+turn 90 @v 0.2
+drive :($l8 >= 0.5)
+fwd 0.5
+turn -90
 fwd 0.4
-turn -90 
-fwd 1.0
-
-turn -135
 ignoreobstacles
-fwd 0.125
+turn -180 @v 0.5
+fwd 0.4 @v 0.2
+turn 90
 ignoreobstacles
-turnr 0.2 -45
+drive @v 0.15:($crossingblackline == 1)
 ignoreobstacles
-drive :($motionstatus == 1)
+fwd 0.2 @v 0.2
 ignoreobstacles
-turnr 0.75 90
+turn 90
 ignoreobstacles
-fwd -0.15
-ignoreobstacles
-turn 90 
-ignoreobstacles
-fwd 0.75
-
-% For the physical track
-%followline "bm" :($crossingblackline == 1)
-% <params name="smr0" robotpose="3.4  0.0 1.57" wheelbase="0.26" encresolution="0.00010245"/>
+followline "bm" @v 0.4:($l4 <= 0.2)
