@@ -1,0 +1,140 @@
+laser "scanpush cmd='zoneobst' "
+%Start the laser scanner. Variables "$l0"-"$l8" 180 degree halfcircle. 
+% sml-cl code for robot 
+
+
+%%% Constants
+speed = 0.3
+store = 1
+x = $odox
+
+% Begin logging
+log "store" "$motionstatus" "x" "$l0" "$l8"
+store = 0
+
+% Need to find the distance (x-coordinate) to the first box. 
+followline "br" @v speed :($motionstatus == 1)
+% Use IR sensor to determine distance
+x = $odox + $irdistfrontmiddle
+store = 1
+wait 0.01
+store = 0
+$motionstatus = 0
+
+% Back up and turn
+fwd -0.1 @v speed
+turn 180 @v speed
+
+
+% Go back to the first intersetion and the start point + turn 180
+followline "br" :($crossingblackline == 1)
+$crossingblackline = 0
+turn 180
+
+% Follow the line to the box and push it away
+followline "bl" :($motionstatus == 1)
+$motionstatus = 0
+ignoreobstacles
+fwd 0.75 @v speed
+
+
+% Drive back and follow the line until the intersection + second gate
+fwd -1 @v speed
+
+turn -90 @v speed
+drive @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+ignoreobstacles
+fwd 0.20 @v speed
+turn 90
+followline "bm" @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+fwd 0.2 @v speed
+turn 90
+
+% Turn to the first gate
+ignoreobstacles
+followline "bm" @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+
+% Go though the second gate and stop at the crossingblackline
+ignoreobstacles
+fwd 0.1 @v speed
+ignoreobstacles
+followline "br" @v speed :($crossingblackline == 1)
+
+% Use the laser as a guide
+%followline "bm" @v speed :($l0 >= 0.55)
+
+% Use distdriven but laser should be a better solution
+followline "bm" @v speed :($drivendist >= 1.2)
+stop
+turn 90
+
+%drive until wall and turn 
+drive @v speed :($motionstatus == 1)
+motionstatus = 0
+turn 90
+
+followwall "r" 0.4 @v 0.2 :($l0 <= 0.5 & $l8 <= 0.5)
+fwd 0.75 @v speed
+
+% Turn and drive though the first wall gate
+turn -90
+fwd 0.75
+turn -90
+
+% Follow the out side of the wall.
+fwd 0.5 @v speed
+%followwall "r" 0.4 @v 0.2 :($l0 <= 0.5 & $l8 <= 0.5)
+%fwd 0.75 @v speed
+drive @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+
+% Turn and drive though the second wall gate
+fwd 0.2 @v speed
+turn -90
+fwd 0.6
+
+% turn around
+turn -180
+followline "bm" @v speed :($line3 >= 0.95 | $line4 >= 0.95)
+followline "wm" @v speed :($crossingblackline == 1)
+
+%Turn towards the garage and get into position to open the gate
+fwd 0.2 @v speed
+$crossingblackline = 0
+turn -90
+followline "bm" @v speed :($crossingblackline == 1)
+$crossingblackline = 0
+% Drive a bit closer to the garage door.
+fwd 0.2 @v speed
+
+% Want to user laser scanner here, but doesn't work..
+turn 90 
+fwd 0.75 @v speed
+
+turn -90
+fwd 0.75 @v speed
+% turn towards the garage
+turn -90
+eval $irdistfrontmiddle
+ignoreobstacles
+%drive @v speed :($irdistfrontmiddle <=0.1)
+% Not optimal solution
+fwd 0.18 @v speed
+ignoreobstacles
+turn -90
+
+ignoreobstacles
+fwd 0.5
+ignoreobstacles
+turn 90
+ignoreobstacles
+fwd 0.55
+ignoreobstacles
+turn 90
+ignoreobstacles
+fwd 0.65
+
+
