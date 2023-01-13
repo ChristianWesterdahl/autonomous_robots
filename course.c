@@ -161,7 +161,7 @@ bool sensorstop(char *sensor, double condition, int mode);
 /*
 fwd(dist, speed)
 turn(angle, speed)
-line(dist, speed, col, crossingLine, dir, sen)
+line(dist, speed, dir, col, crossingLine, sensorStop) #col: 0-black, 1-white #dir: 0-right 1-left
 resetOdo()
 measure(laser_compensation)
 */
@@ -169,13 +169,20 @@ measure(laser_compensation)
 //methods
 enum ms course_methods[500] = {
   //course here
+  ms_line,
+  ms_resetOdo,
+  ms_turn,
+  ms_fwd,
   ms_end
   };
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
+  0.8, 0.2, 0, 0, //line
+  90/180*M_PI, 0.2,
+  0.5, 0.4
   //course variables here
-  }; 
+  };
 //------------------------end of course----------------------------------
 
 odotype odo;
@@ -226,7 +233,7 @@ void ctrlchandler(int sig)
 int main(int argc, char **argv)
 {
   bool change_var; //to change the method variable counter var_i
-  int n = 0, courseLength = 0, i_var = 0, dir = 0, arg, time = 0, opt, calibration;
+  int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration;
   double dist = 0, angle = 0, speed = 0, acceleration = 0;
   // install sighandlers
   if (1)
@@ -412,6 +419,7 @@ int main(int argc, char **argv)
     /****************************************
     / mission statemachine
     */
+    printf("var_i: %d, course state: %d\n", i_var, courseLength-n);
     sm_update(&mission);
     switch (mission.state)
     {
@@ -429,7 +437,7 @@ int main(int argc, char **argv)
       {
         dist = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
-        printf("fwd: (%f,%f)\n", i_var, dist, speed);
+        printf("fwd: (%f,%f)\n", dist, speed);
         change_var = false;
       }
       mot.sensorstop = sensorstop("r0", 10.0, 0); // Replace with course_vars[];
@@ -438,6 +446,7 @@ int main(int argc, char **argv)
         n = n-1;
         mission.state = course_methods[courseLength-n];
         change_var = true;
+        printf("fwd ended\n");
       }
     break;
 
@@ -462,19 +471,21 @@ int main(int argc, char **argv)
     case ms_line:
       if (change_var) 
       {
-        printf("var_i: %d ,", i_var);
         dist = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
-        dir = 0; // course_vars[i_var]; i_var++;
-        printf("follow: (%f,%f,%d)\n", dist, speed, dir);
+        dir = course_vars[i_var]; i_var++;
+        linecolor = course_vars[i_var]; i_var++;
+        printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
       mot.sensorstop = sensorstop("r0", 10.0, 0);
-      if(line(dist, speed, dir, 0, false, false, mission.time)) 
+      printf("follow middle");
+      if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
         change_var = true;
+        
       }
     break;
 
@@ -989,7 +1000,7 @@ bool sensorstop(char *sensor, double condition, int mode)
     // Get value from sensor
     sensor_value = irsensor->data[index];
   }
-
+  
   // Now check if condition is true given the values
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
