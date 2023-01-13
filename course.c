@@ -84,6 +84,7 @@ typedef struct
   int followDir;
   bool sensorstop;
   bool crossingline;
+  double walldist;
 
 } motiontype;
 
@@ -95,6 +96,9 @@ typedef struct
 #define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
 #define DEFAULT_ROBOTPORT 24902
 #define k 0.001
+#define KA 16.0 // For ir sensor
+#define KB 76.0 // For ir sensor
+#define MAX_LINE 128 // For linesensor 
 
 typedef struct
 {                          // input signals
@@ -148,7 +152,7 @@ int fwd(double dist, double speed, double acceleration, bool sensorstop, int tim
 int turn(double angle, double speed, int time);
 //int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 int line(double dist, double speed, int dir, int linecolor, bool crossingline, bool sensorstop, int time); // New
-int wall(double speed, int orientation, int time, double dist, bool sensorstop); // New
+int wall(double speed, int dir, double walldist, int time, double dist, bool sensorstop); // New
 //auxilory function (all new)
 double *calibrate_line(symTableElement *linesensor_values);
 //int find_line_min(double *sensor_values, int orientation); old follow line
@@ -156,6 +160,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(char *sensor, double condition, int mode);
+double readsensor(char *sensor);
 
 //------------------------deffining the course---------------------------
 /*
@@ -641,8 +646,11 @@ void update_motcon(motiontype *p, odotype *o)
       p->startpos = (p->left_pos + p->right_pos) / 2;
       p->curcmd = mot_line;
       break;
-    }
 
+    case mot_wall:
+      p->startpos = (p->left_pos + p->right_pos) / 2;
+      p->curcmd = mot_wall;
+    }
     p->cmd = 0;
   }
 
@@ -657,6 +665,7 @@ void update_motcon(motiontype *p, odotype *o)
   int sensor_index;
   int i;
   double com;
+  double sensor_value;
 
   switch (p->curcmd)
   {
@@ -694,7 +703,7 @@ void update_motcon(motiontype *p, odotype *o)
         p->motorspeed_r = forward*p->speedcmd;
       }
     }
-    break;
+  break;
 
   //------------------------------------turning-----------------------------------
   case mot_turn:
@@ -738,7 +747,7 @@ void update_motcon(motiontype *p, odotype *o)
         p->finished = 1;
       }
     }
-    break;
+  break;
   
   //------------------------following line------------------------------------------
 
@@ -805,7 +814,106 @@ void update_motcon(motiontype *p, odotype *o)
         p->motorspeed_l += v_delta;
       }
       printf("Motorspeeds: l - %f, r - %f\n", p->motorspeed_l, p->motorspeed_r);
-      break;
+  break;
+
+  //--------------------------------------------wall---------------------------------------------
+  case mot_wall:
+    remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
+    v_max = sqrt(2*0.5*fabs(remaining_dist));
+
+    if (mot.followDir == 0) //If 0 then keep wall to left
+    {
+      sensor_value = readsensor('r0');
+      v_delta = 0.1*(mot.walldist - sensor_value); // If this is negative, robot is too far from wall, if positive too close. It should be zero.
+
+      // From here we utilize the same code as for the linesensor
+      // Check if destination is reached or sensors tell motor to stop.
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
+      {
+        p->finished = 1;
+        p->motorspeed_l = 0;
+        p->motorspeed_r = 0;
+      }
+
+      // Check if any speed  surpasses max allowed speed, or else set it.
+      if (p->speedcmd < fabs(p->motorspeed_l)) p->motorspeed_l = p->speedcmd;
+      if (p->speedcmd < fabs(p->motorspeed_r)) p->motorspeed_r = p->speedcmd;
+      
+      if (fabs(v_delta) < 0.00001) //Compare with zero, using precision.
+      {
+        // Decrease velocity:
+        if (v_max < p->speedcmd)
+        {
+          p->motorspeed_l = v_max;
+          p->motorspeed_r = v_max;
+        }
+        else // Else accelerate
+        {
+          p->motorspeed_l += 0.5 / 100;
+          p->motorspeed_r += 0.5 / 100;
+        }
+      }
+      // If less than 0, this means the distance to the wall is too large, in that case we should turn left (as we want the wall on the LEFT side of the robot)
+      else if (v_delta < 0) 
+      {
+        p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
+        p->motorspeed_r -= v_delta;
+      }
+      // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
+      else if (v_delta > 0)
+      {
+        p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
+        p->motorspeed_l += v_delta;
+      }
+
+
+    }
+    else if (mot.followDir == 1) //If 1 then keep wall to right
+    {
+      sensor_value = readsensor('r5');
+      v_delta = 0.1*(mot.walldist - sensor_value); // If this is negative, robot is too far from wall, if positive too close. It should be zero.
+
+      // From here we utilize the same code as for the linesensor
+      // Check if destination is reached or sensors tell motor to stop.
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
+      {
+        p->finished = 1;
+        p->motorspeed_l = 0;
+        p->motorspeed_r = 0;
+      }
+
+      // Check if any speed  surpasses max allowed speed, or else set it.
+      if (p->speedcmd < fabs(p->motorspeed_l)) p->motorspeed_l = p->speedcmd;
+      if (p->speedcmd < fabs(p->motorspeed_r)) p->motorspeed_r = p->speedcmd;
+      
+      if (fabs(v_delta) < 0.00001) //Compare with zero, using precision.
+      {
+        // Decrease velocity:
+        if (v_max < p->speedcmd)
+        {
+          p->motorspeed_l = v_max;
+          p->motorspeed_r = v_max;
+        }
+        else // Else accelerate
+        {
+          p->motorspeed_l += 0.5 / 100;
+          p->motorspeed_r += 0.5 / 100;
+        }
+      }
+      // If less than 0, this means the distance to the wall is too large, in that case we should turn right (as we want the wall on the RIGHT side of the robot)
+      else if (v_delta < 0) 
+      {
+        p->motorspeed_l -= v_delta; 
+        p->motorspeed_r += v_delta;
+      }
+      else if (v_delta > 0)
+      {
+        p->motorspeed_r += v_delta;
+        p->motorspeed_l -= v_delta;
+      }
+    }
+
+  break;
 
   //------------------------------------------stopping-------------------------------------------
   case mot_stop:
@@ -860,9 +968,14 @@ int line(double dist, double speed, int dir, int linecolor, bool crossingline, b
     return mot.finished;
 }
 
-int wall(double speed, int orientation, int time, double dist, bool sensorstop)
+int wall(double speed, int dir, double walldist, int time, double dist, bool sensorstop)
 {
-  printf("Not implemented!");
+  mot.cmd = mot_wall;
+  mot.speedcmd = speed;
+  mot.dist = dist,
+  mot.followDir = dir;
+  mot.sensorstop = sensorstop;
+  mot.walldist = walldist;
 }
 
 void sm_update(smtype *p)
@@ -887,7 +1000,7 @@ double *calibrate_line(symTableElement *linesensor_values)
   int i;
 
   for (i = 0; i < 8; i++){
-    r[i] = (linesensor_values->data[i]) / 255.0;
+    r[i] = (linesensor_values->data[i]) / MAX_LINE;
   }
   return r;
 }
@@ -1003,7 +1116,18 @@ bool compare_floats(float f1, float f2)
 
 bool sensorstop(char *sensor, double condition, int mode)
 {
-  // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor
+  double sensor_value;
+
+  sensor_value = readsensor(sensor);
+
+  // Now check if condition is true given the values
+  if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
+  else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
+}
+
+double readsensor(char *sensor)
+{
+  // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor 
   if (sensor == 'N') return false;
 
   int index;
@@ -1019,15 +1143,7 @@ bool sensorstop(char *sensor, double condition, int mode)
     sscanf(sensor[1], "%d", &index);
     // Get value from sensor
     sensor_value = irsensor->data[index];
+    sensor_value = (KA)/(sensor_value - KB);
   }
-
-  // Now check if condition is true given the values
-  if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
-  else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
+  return sensor_value;
 }
-
-//double readsensor(char *sensor)
-//{
-//  if (sensor == 'N') return -100.0;
-//
-//}
