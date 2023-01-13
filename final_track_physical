@@ -1,12 +1,16 @@
-%%% initialize the laser module
 laser "scanpush cmd='zoneobst' "
+%%% initialize the laser module
+%%% final track simulation
 
-%%% FINAL TRACK SIMULATION
+%%% X-distance measurement from start to box
+followline "bl" @v 0.2 :($drivendist >= 0.01 | $l7 >= 3)
+pi = 3.14159265359
+hypodist = $l8
+angle = (sin(90 * (pi/180)) * 0.6) / hypodist
+angle = abs(180 - (90 + angle))
 
-%Use laser to measure x-distance
-followline "bl" @v 0.25:($drivendist >= 0.01)
-followline "bl" :($l7 >= 1.5)
-eval sin(1.222)*$l8
+distbox = (sin(angle) * hypodist) / sin(90 * (pi/180))
+eval distbox
 
 %Move to box
 followline "bl" @v 0.25:($motionstatus == 1)
