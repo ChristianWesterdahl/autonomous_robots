@@ -159,7 +159,7 @@ double *calibrate_line(symTableElement *linesensor_values);
 int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
-bool sensorstop(char *sensor, double condition, int mode);
+bool sensorstop(int sensor, double condition, int mode);
 double readsensor(int sensor);
 
 //------------------------deffining the course---------------------------
@@ -183,7 +183,7 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  0.8, 0.2, 0, 0, //line
+  1.0, 0.2, 0, 0, //line
   90/180*M_PI, 0.2,
   0.5, 0.4
   //course variables here
@@ -445,7 +445,7 @@ int main(int argc, char **argv)
         printf("fwd: (%f,%f)\n", dist, speed);
         change_var = false;
       }
-      mot.sensorstop = sensorstop("r0", 10.0, 0); // Replace with course_vars[];
+      mot.sensorstop = sensorstop(10, 10.0, 0); // Replace with course_vars[];
       if (fwd(dist, speed, acceleration, 0, mission.time)) 
       {
         n = n-1;
@@ -461,7 +461,7 @@ int main(int argc, char **argv)
       {
         angle = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
-        printf("turn: (%f,%f)\n", i_var, angle, speed);
+        //printf("turn: (%f,%f)\n", i_var, angle, speed);
         change_var = false;
       }
       if (turn(angle, speed, mission.time)) 
@@ -483,7 +483,7 @@ int main(int argc, char **argv)
         printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
-      mot.sensorstop = sensorstop("r0", 10.0, 0);
+      mot.sensorstop = sensorstop(10, 10.0, 0);
       printf("follow middle");
       if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
       {
@@ -652,8 +652,6 @@ void update_motcon(motiontype *p, odotype *o)
   // Custom values for follow_line sensor functionality
   double *calibrated_sensorvalues;
   int sensor_index;
-  int i;
-  double com;
   double sensor_value;
 
   switch (p->curcmd)
@@ -1094,7 +1092,7 @@ bool compare_floats(float f1, float f2)
   }
 }
 
-bool sensorstop(char *sensor, double condition, int mode)
+bool sensorstop(int sensor, double condition, int mode)
 {
   double sensor_value;
 
