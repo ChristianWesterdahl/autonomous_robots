@@ -98,7 +98,7 @@ typedef struct
 #define k 0.001
 #define KA 16.0 // For ir sensor
 #define KB 76.0 // For ir sensor
-#define MAX_LINE 128 // For linesensor 
+#define MAX_LINE 130.0 // For linesensor 
 
 typedef struct
 {                          // input signals
@@ -174,8 +174,8 @@ measure(laser_compensation)
 //methods
 enum ms course_methods[500] = {
   //course here
-  ms_line,
-  ms_resetOdo,
+  //ms_line,
+  //ms_resetOdo,
   ms_turn,
   ms_fwd,
   ms_end
@@ -183,7 +183,7 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  1.0, 0.2, 0, 0, //line
+  //1.0, 0.2, 0, 0, //line
   90/180*M_PI, 0.2,
   0.5, 0.4
   //course variables here
@@ -647,7 +647,7 @@ void update_motcon(motiontype *p, odotype *o)
   double remaining_dist;
   double v_max;
   double v_delta;
-  double angular_distance;
+  double remaining_angle;
   
   // Custom values for follow_line sensor functionality
   double *calibrated_sensorvalues;
@@ -658,7 +658,7 @@ void update_motcon(motiontype *p, odotype *o)
   {
   //-----------------------------------------------forward---------------------------------------
   case mot_move:
-    
+    printf("GOING FORWARD!\n");
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || mot.sensorstop)
     {  
       p->finished = 1;
@@ -694,6 +694,86 @@ void update_motcon(motiontype *p, odotype *o)
 
   //------------------------------------turning-----------------------------------
   case mot_turn:
+    printf("TURNING THE ROBOT!");
+    // If we have to turn left (the angle is positive)
+    if (p->angle>0){
+
+      //Calculate the remaining angle to turn:
+      remaining_angle = ((p->angle*p->w)/2) - (p->right_pos-p->startpos);
+	    v_max = sqrt(2 * 0.5 * fabs(remaining_angle));
+
+      // Have we finished turning? If so stop!
+      if (p->right_pos-p->startpos > (p->angle*p->w)/2){
+        p->motorspeed_r=0;
+        p->motorspeed_l=0;
+        p->finished=1;
+	    }
+
+      //Decrease velocity for turning:
+      else if (v_max < p->speedcmd/2)
+      {
+        p->motorspeed_r = v_max;
+        p->motorspeed_l = -v_max;
+      }
+
+      //Else, if not angular goal is reached, we accelerate
+      else
+      {
+        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
+        if ((p->motorspeed_r > p->speedcmd/2) | (p->motorspeed_l < -p->speedcmd/2))
+        {
+          p->motorspeed_r = p->speedcmd/2;
+          p->motorspeed_l = -p->speedcmd/2;
+        }
+
+        //Else we should accelerate!
+        else 
+        {
+          p->motorspeed_r += 0.5 / 100;
+          p->motorspeed_l += -(0.5 / 100);
+        }
+      }	
+	  }
+	  else //Else we do a right turn
+    {
+      //Calculate the remaining angle to turn:
+      remaining_angle = (fabs(p->angle*p->w)/2) - (p->left_pos-p->startpos);
+	    v_max = sqrt(2 * 0.5 * fabs(remaining_angle));
+
+      //Have we finished turning? If so stop!
+	    if (p->left_pos-p->startpos > (fabs(p->angle)*p->w)/2)
+      {
+        p->motorspeed_l=0;
+        p->motorspeed_r=0;
+        p->finished=1;
+
+	    }
+      //Decrease velocity for turning:
+      else if (v_max < p->speedcmd/2)
+      {
+        p->motorspeed_r = -v_max;
+        p->motorspeed_l = v_max;
+      }
+	    else {
+        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
+        if ((p->motorspeed_r < -p->speedcmd/2) | (p->motorspeed_l > p->speedcmd/2))
+        {
+          p->motorspeed_r = -p->speedcmd/2;
+          p->motorspeed_l = p->speedcmd/2;
+        }
+
+        //Else we should accelerate!
+        else 
+        {
+          p->motorspeed_r += -(0.5 / 100);
+          p->motorspeed_l += 0.5 / 100;
+        }
+	    }
+	  }
+    break;
+  /*
+  case mot_turn:
+    printf("TURNING THE ROBOT\n");
     angular_distance = p->theta_ref - o->theta;
     if (angular_distance > 0 && angular_distance <= M_PI)
     { // If we have to turn left (the angle is less than 180 degrees and postiive)
@@ -726,6 +806,7 @@ void update_motcon(motiontype *p, odotype *o)
       }
     }
   break;
+  */
   
   //------------------------following line------------------------------------------
 
@@ -735,11 +816,11 @@ void update_motcon(motiontype *p, odotype *o)
       
       remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
       v_max = sqrt(2*0.5*fabs(remaining_dist));
-      v_delta = 0.0005 * (3-sensor_index);
+      v_delta = 0.00005 * (3-sensor_index);
       
       printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
       // Check if destination is reached or sensors tell motor to stop.
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) // | mot.sensorstop)
       {
         p->finished = 1;
         p->motorspeed_l = 0;
@@ -977,9 +1058,15 @@ double *calibrate_line(symTableElement *linesensor_values)
   static double r[8];
   int i;
 
+  printf("Linesensor:");
   for (i = 0; i < 8; i++){
+    //printf(" %d", linesensor_values->data[i]);
     r[i] = (linesensor_values->data[i]) / MAX_LINE;
+    if (r[i] > 0.62) r[i] += 0.2;
+    else r[i] -= 0.2;
+    printf(" %f", r[i]);
   }
+  printf("\n");
   return r;
 }
 
