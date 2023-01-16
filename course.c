@@ -151,7 +151,7 @@ void sm_update(smtype *p);
 
 void update_motcon(motiontype *p, odotype *o);
 
-int fwd(double dist, double speed, double acceleration, bool sensorstop, int time);
+int fwd(double dist, double speed, double acceleration, bool crossingline, bool sensorstop, int time);
 int turn(double angle, double speed, int time);
 //int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 int line(double dist, double speed, int dir, int linecolor, bool crossingline, bool sensorstop, int time); // New
@@ -189,10 +189,10 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  0.1, 0.2, 0, 0, 0, 0, //NEVER CHANGE THIS
+  0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
   2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ /*, 0 crossingLine*/, 1 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
   90.0/180.0*M_PI, 0.2,
-  1, 0.4, 1, 4, 0.2, 0
+  1, 0.4, 1, 1, 4, 0.2, 0
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -244,7 +244,7 @@ void ctrlchandler(int sig)
 
 int main(int argc, char **argv)
 {
-  bool change_var, sensor_stop; //to change the method variable counter var_i
+  bool change_var, sensor_stop, crossing_line; //to change the method variable counter var_i
   int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration, sensor = 0, mode = 0;
   double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0, sensor_dist = 0;
   // install sighandlers
@@ -449,6 +449,7 @@ int main(int argc, char **argv)
       {
         dist = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
+        crossing_line = (int) course_vars[i_var]; i_var++;
         sensor_stop = (int) course_vars[i_var]; i_var++;
         sensor = (int) course_vars[i_var]; i_var++;
         sensor_dist = course_vars[i_var]; i_var++;
@@ -458,7 +459,7 @@ int main(int argc, char **argv)
       }
       mot.sensorstop = sensorstop(sensor, sensor_dist, mode); // Replace with course_vars[];
       //printf("sensorStop: %d\n", mot.sensorstop);
-      if (fwd(dist, speed, acceleration, sensor_stop, mission.time)) 
+      if (fwd(dist, speed, acceleration, crossing_line, sensor_stop, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
@@ -500,7 +501,6 @@ int main(int argc, char **argv)
         change_var = false;
       }
       mot.sensorstop = sensorstop(sensor, sensor_dist, mode);
-      printf("snesor stop: %d\n", mot.sensorstop);
       if(line(dist, speed, dir, linecolor, false, sensor_stop, mission.time)) 
       {
         n = n-1;
@@ -700,10 +700,13 @@ void update_motcon(motiontype *p, odotype *o)
   {
   //-----------------------------------------------forward---------------------------------------
   case mot_move:
-    if (p->sensorstop_active) 
+    if (p->crossingline) 
     {
-      sensor_stop = p->sensorstop;
+      calibrated_sensorvalues = calibrate_line(linesensor);
+      printf("line values: %f %f %f %f %f %f %f %f\n", calibrated_sensorvalues[0], calibrated_sensorvalues[1], calibrated_sensorvalues[2], calibrated_sensorvalues[3], calibrated_sensorvalues[4], calibrated_sensorvalues[5], calibrated_sensorvalues[6], calibrated_sensorvalues[7]);
+      if(find_line_min(calibrated_sensorvalues, 0, 0) == -1) {sensor_stop = true; printf("crossing line found\n");}
     }
+    if (p->sensorstop_active && !sensor_stop) sensor_stop = p->sensorstop; //condition check
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
     {  
@@ -958,7 +961,7 @@ void update_motcon(motiontype *p, odotype *o)
   }
 }
 
-int fwd(double dist, double speed, double acceleration, bool sensorstop, int time)
+int fwd(double dist, double speed, double acceleration, bool crossingline, bool sensorstop, int time)
 {
   if (time == 0)
   {
@@ -967,6 +970,7 @@ int fwd(double dist, double speed, double acceleration, bool sensorstop, int tim
     mot.accelerationcmd = acceleration;
     mot.dist = dist;
     mot.sensorstop_active = sensorstop;
+    mot.crossingline = crossingline;
     return 0;
   }
   else
@@ -1155,7 +1159,6 @@ bool sensorstop(int sensor, double condition, int mode)
   
   sensor_value = readsensor(sensor);
 
-  //printf("laser values: %f %f %f %f %f %f %f %f %f\n", laserpar[0], laserpar[1], laserpar[2], laserpar[3], laserpar[4], laserpar[5], laserpar[6], laserpar[7], laserpar[8]);
   if(sensor_value == 0) printf("sensor not connected!!!\n");
   // Now check if condition is true given the values
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
