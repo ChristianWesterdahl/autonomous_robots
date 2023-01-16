@@ -179,7 +179,7 @@ enum ms course_methods[500] = {
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   0.8, 0.2, 0, 0, //line
-  90/180*M_PI, 0.2,
+  90.0/180.0*M_PI, 0.2,
   0.5, 0.4
   //course variables here
   };
