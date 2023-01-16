@@ -25,7 +25,6 @@
 #define M_PI (3.14159265358979323846264338327950288)
 #endif
 
-
 struct xml_in *xmldata;
 struct xml_in *xmllaser;
 struct
@@ -90,7 +89,6 @@ typedef struct
   bool sensorstop;
   bool crossingline;
   double walldist;
-
 } motiontype;
 
 /*****************************************
@@ -103,7 +101,6 @@ typedef struct
 #define k 0.001
 #define KA 16.0 // For ir sensor
 #define KB 76.0 // For ir sensor
-#define MAX_LINE 130.0 // For linesensor 
 
 typedef struct
 {                          // input signals
@@ -157,7 +154,7 @@ int fwd(double dist, double speed, double acceleration, bool sensorstop, int tim
 int turn(double angle, double speed, int time);
 //int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 int line(double dist, double speed, int dir, int linecolor, bool crossingline, bool sensorstop, int time); // New
-int wall(double speed, int dir, double walldist, int time, double dist, bool sensorstop); // New
+int wall(double dist, double speed, int dir, double walldist, bool sensorstop, int time);
 //auxilory function (all new)
 double *calibrate_line(symTableElement *linesensor_values);
 //int find_line_min(double *sensor_values, int orientation); old follow line
@@ -174,13 +171,14 @@ turn(angle, speed)
 line(dist, speed, dir, col, crossingLine, sensorStop) #col: 0-black, 1-white #dir: 0-right 1-left
 resetOdo()
 measure(laser_compensation)
+wall(dist, speed, dir, walldist, sensorStop)
 */
 
 //methods
 enum ms course_methods[500] = {
   //course here
-  //ms_line,
-  //ms_resetOdo,
+  ms_line,
+  ms_resetOdo,
   ms_turn,
   ms_fwd,
   ms_end
@@ -188,8 +186,8 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  //1.0, 0.2, 0, 0, //line
-  90/180.0*M_PI, 0.2,
+  0.8, 0.2, 0, 0, //line
+  90.0/180.0*M_PI, 0.2,
   0.5, 0.4
   //course variables here
   };
@@ -244,7 +242,7 @@ int main(int argc, char **argv)
 {
   bool change_var; //to change the method variable counter var_i
   int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration;
-  double dist = 0, angle = 0, speed = 0, acceleration = 0;
+  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0;
   // install sighandlers
   if (1)
   {
@@ -438,7 +436,6 @@ int main(int argc, char **argv)
       courseLength = n;
       acceleration = 0.5;
       mission.state = course_methods[courseLength-n];
-      printf("Mission state: %d\n", mission.state);
       change_var = 1;
     break;
     
@@ -451,7 +448,7 @@ int main(int argc, char **argv)
         printf("fwd: (%f,%f)\n", dist, speed);
         change_var = false;
       }
-      mot.sensorstop = sensorstop(10, 10.0, 0); // Replace with course_vars[];
+      //mot.sensorstop = sensorstop(0, 10.0, 0); // Replace with course_vars[];
       if (fwd(dist, speed, acceleration, 0, mission.time)) 
       {
         n = n-1;
@@ -467,9 +464,9 @@ int main(int argc, char **argv)
       {
         angle = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
+        printf("turn: (%f,%f)\n", i_var, angle, speed);
         change_var = false;
       }
-      printf("turn: (%d,%f)\n", i_var, angle);
       if (turn(angle, speed, mission.time)) 
       {
         n = n-1;
@@ -489,23 +486,43 @@ int main(int argc, char **argv)
         printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
-      mot.sensorstop = sensorstop(10, 10.0, 0);
-      printf("follow middle");
+      //mot.sensorstop = sensorstop(0, 10.0, 0);
       if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
         change_var = true;
-        
       }
     break;
 
+    //reset odometry to (0,0,0)
     case ms_resetOdo:
       reset_odo(&mot, &odo);
       n = n-1;
       mission.state = course_methods[courseLength-n];
       change_var = true;
       printf("odo reset\n");      
+    break;
+
+    //follow the wall
+    case ms_wall:
+      if (change_var) 
+      {
+        dist = course_vars[i_var]; i_var++;
+        speed = course_vars[i_var]; i_var++;
+        dir = course_vars[i_var]; i_var++;
+        walldist = course_vars[i_var]; i_var++;
+        //sensorstop = course_vars[i_var]; i_var++;
+        printf("wall: (%f,%f,%d,%f)\n", dist, speed, dir, walldist);
+        change_var = false;
+      }
+      //mot.sensorstop = sensorstop(0, 10.0, 0);
+      if(wall(dist, speed, dir, walldist, false, mission.time)) 
+      {
+        n = n-1;
+        mission.state = course_methods[courseLength-n];
+        change_var = true;
+      }
     break;
 
     //end
@@ -646,25 +663,29 @@ void update_motcon(motiontype *p, odotype *o)
     case mot_wall:
       p->startpos = (p->left_pos + p->right_pos) / 2;
       p->curcmd = mot_wall;
+      break;
     }
+
     p->cmd = 0;
   }
 
   double remaining_dist;
   double v_max;
   double v_delta;
-  double remaining_angle;
+  double angular_distance;
   
   // Custom values for follow_line sensor functionality
   double *calibrated_sensorvalues;
   int sensor_index;
   double sensor_value;
+  int i;
+  double com;
 
   switch (p->curcmd)
   {
   //-----------------------------------------------forward---------------------------------------
   case mot_move:
-    printf("GOING FORWARD!\n");
+    
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || mot.sensorstop)
     {  
       p->finished = 1;
@@ -696,94 +717,10 @@ void update_motcon(motiontype *p, odotype *o)
         p->motorspeed_r = forward*p->speedcmd;
       }
     }
-  break;
+    break;
 
   //------------------------------------turning-----------------------------------
   case mot_turn:
-    printf("TURNING THE ROBOT!\n");
-    printf("Angle: %f\n", p->angle);
-
-    // If we have to turn left (the angle is positive)
-    if (p->angle>0){
-      printf("POSITIVE ANGLE!\n");
-      //Calculate the remaining angle to turn:
-      remaining_angle = ((p->angle*p->w)/2) - (p->right_pos-p->startpos);
-	    v_max = sqrt(2 * 0.5 * fabs(remaining_angle));
-
-      // Have we finished turning? If so stop!
-      if (p->right_pos-p->startpos > (p->angle*p->w)/2){
-        printf("WE STOP TURNING!\n");
-        p->motorspeed_r=0;
-        p->motorspeed_l=0;
-        p->finished=1;
-	    }
-
-      //Decrease velocity for turning:
-      else if (v_max < p->speedcmd/2)
-      {
-        p->motorspeed_r = v_max;
-        p->motorspeed_l = -v_max;
-      }
-
-      //Else, if not angular goal is reached, we accelerate
-      else
-      {
-        printf("Accelerate!\n");
-        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
-        if ((p->motorspeed_r > p->speedcmd/2) | (p->motorspeed_l < -p->speedcmd/2))
-        {
-          p->motorspeed_r = p->speedcmd/2;
-          p->motorspeed_l = -p->speedcmd/2;
-        }
-
-        //Else we should accelerate!
-        else 
-        {
-          p->motorspeed_r += 0.5 / 100;
-          p->motorspeed_l += -(0.5 / 100);
-        }
-      }	
-	  }
-	  else //Else we do a right turn
-    {
-      //Calculate the remaining angle to turn:
-      remaining_angle = (fabs(p->angle*p->w)/2) - (p->left_pos-p->startpos);
-	    v_max = sqrt(2 * 0.5 * fabs(remaining_angle));
-
-      //Have we finished turning? If so stop!
-	    if (p->left_pos-p->startpos > (fabs(p->angle)*p->w)/2)
-      {
-        p->motorspeed_l=0;
-        p->motorspeed_r=0;
-        p->finished=1;
-
-	    }
-      //Decrease velocity for turning:
-      else if (v_max < p->speedcmd/2)
-      {
-        p->motorspeed_r = -v_max;
-        p->motorspeed_l = v_max;
-      }
-	    else {
-        //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
-        if ((p->motorspeed_r < -p->speedcmd/2) | (p->motorspeed_l > p->speedcmd/2))
-        {
-          p->motorspeed_r = -p->speedcmd/2;
-          p->motorspeed_l = p->speedcmd/2;
-        }
-
-        //Else we should accelerate!
-        else 
-        {
-          p->motorspeed_r += -(0.5 / 100);
-          p->motorspeed_l += 0.5 / 100;
-        }
-	    }
-	  }
-    break;
-  /*
-  case mot_turn:
-    printf("TURNING THE ROBOT\n");
     angular_distance = p->theta_ref - o->theta;
     if (angular_distance > 0 && angular_distance <= M_PI)
     { // If we have to turn left (the angle is less than 180 degrees and postiive)
@@ -815,8 +752,7 @@ void update_motcon(motiontype *p, odotype *o)
         p->finished = 1;
       }
     }
-  break;
-  */
+    break;
   
   //------------------------following line------------------------------------------
 
@@ -826,11 +762,11 @@ void update_motcon(motiontype *p, odotype *o)
       
       remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
       v_max = sqrt(2*0.5*fabs(remaining_dist));
-      v_delta = 0.00005 * (3-sensor_index);
+      v_delta = 0.0005 * (3-sensor_index);
       
       printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
       // Check if destination is reached or sensors tell motor to stop.
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) // | mot.sensorstop)
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
       {
         p->finished = 1;
         p->motorspeed_l = 0;
@@ -883,9 +819,11 @@ void update_motcon(motiontype *p, odotype *o)
         p->motorspeed_l += v_delta;
       }
       printf("Motorspeeds: l - %f, r - %f\n", p->motorspeed_l, p->motorspeed_r);
-  break;
+      break;
 
-  //--------------------------------------------wall---------------------------------------------
+
+  //------------------------------------------Wall-----------------------------------------------
+  
   case mot_wall:
     remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
@@ -985,6 +923,7 @@ void update_motcon(motiontype *p, odotype *o)
   break;
 
   //------------------------------------------stopping-------------------------------------------
+  
   case mot_stop:
     p->motorspeed_l = 0;
     p->motorspeed_r = 0;
@@ -1037,7 +976,7 @@ int line(double dist, double speed, int dir, int linecolor, bool crossingline, b
     return mot.finished;
 }
 
-int wall(double speed, int dir, double walldist, int time, double dist, bool sensorstop)
+int wall(double dist, double speed, int dir, double walldist, bool sensorstop, int time)
 {
   mot.cmd = mot_wall;
   mot.speedcmd = speed;
@@ -1068,15 +1007,9 @@ double *calibrate_line(symTableElement *linesensor_values)
   static double r[8];
   int i;
 
-  printf("Linesensor:");
   for (i = 0; i < 8; i++){
-    //printf(" %d", linesensor_values->data[i]);
-    r[i] = (linesensor_values->data[i]) / MAX_LINE;
-    if (r[i] > 0.62) r[i] += 0.2;
-    else r[i] -= 0.2;
-    printf(" %f", r[i]);
+    r[i] = (linesensor_values->data[i]) / 255.0;
   }
-  printf("\n");
   return r;
 }
 
@@ -1192,7 +1125,7 @@ bool compare_floats(float f1, float f2)
 bool sensorstop(int sensor, double condition, int mode)
 {
   double sensor_value;
-
+  
   sensor_value = readsensor(sensor);
 
   // Now check if condition is true given the values
@@ -1216,5 +1149,6 @@ double readsensor(int sensor)
     sensor_value = irsensor->data[sensor-10];
     sensor_value = (KA)/(sensor_value - KB);
   }
+  printf("returns laserpar\n");
   return sensor_value;
 }
