@@ -137,7 +137,8 @@ enum ms
   ms_line,
   ms_resetOdo,
   ms_wall,
-  ms_end
+  ms_end,
+  ms_dist_box
 };
 
 typedef struct
@@ -163,6 +164,7 @@ bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(int sensor, double condition, int mode);
 double readsensor(int sensor);
+double dist_box(int sensor);
 
 //------------------------deffining the course---------------------------
 /*
@@ -177,18 +179,15 @@ wall(dist, speed, dir, walldist, sensorStop)
 //methods
 enum ms course_methods[500] = {
   //course here
-  ms_line,
-  ms_resetOdo,
-  ms_turn,
   ms_fwd,
+  ms_dist_box,
   ms_end
   };
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  0.8, 0.2, 0, 0, //line
-  90.0/180.0*M_PI, 0.2,
-  0.5, 0.4
+  0.1, 0.2, 0.1, true, 1,
+  0, //wall
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -431,6 +430,7 @@ int main(int argc, char **argv)
     sm_update(&mission);
     switch (mission.state)
     {
+    double dist;
     case ms_init:
       n = (sizeof(course_methods)/sizeof(course_methods[0]))-1;
       courseLength = n;
@@ -503,6 +503,17 @@ int main(int argc, char **argv)
       change_var = true;
       printf("odo reset\n");      
     break;
+
+    //reset odometry to (0,0,0)
+    case ms_dist_box:
+      dist = dist_box(4);
+      n = n-1;
+      mission.state = course_methods[courseLength-n];
+      change_var = true;
+
+      printf("%f\n", dist);      
+    break;
+
 
     //follow the wall
     case ms_wall:
@@ -830,7 +841,7 @@ void update_motcon(motiontype *p, odotype *o)
 
     if (mot.followDir == 0) //If 0 then keep wall to left
     {
-      sensor_value = readsensor(10);
+      sensor_value = readsensor(0);
       v_delta = 0.1*(mot.walldist - sensor_value); // If this is negative, robot is too far from wall, if positive too close. It should be zero.
 
       // From here we utilize the same code as for the linesensor
@@ -863,14 +874,14 @@ void update_motcon(motiontype *p, odotype *o)
       // If less than 0, this means the distance to the wall is too large, in that case we should turn left (as we want the wall on the LEFT side of the robot)
       else if (v_delta < 0) 
       {
-        p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
-        p->motorspeed_r -= v_delta;
+        p->motorspeed_l -= v_delta; //Delta in this case is negative, we should decrease speed on left wheel
+        p->motorspeed_r += v_delta;
       }
       // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
       else if (v_delta > 0)
       {
-        p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
-        p->motorspeed_l += v_delta;
+        p->motorspeed_r += v_delta; // Delta in this case is positive, we should decrease speed on right wheel
+        p->motorspeed_l -= v_delta;
       }
 
 
@@ -910,13 +921,13 @@ void update_motcon(motiontype *p, odotype *o)
       // If less than 0, this means the distance to the wall is too large, in that case we should turn right (as we want the wall on the RIGHT side of the robot)
       else if (v_delta < 0) 
       {
-        p->motorspeed_l -= v_delta; 
-        p->motorspeed_r += v_delta;
+        p->motorspeed_l += v_delta; 
+        p->motorspeed_r -= v_delta;
       }
       else if (v_delta > 0)
       {
-        p->motorspeed_r += v_delta;
-        p->motorspeed_l -= v_delta;
+        p->motorspeed_r -= v_delta;
+        p->motorspeed_l += v_delta;
       }
     }
 
@@ -1142,6 +1153,10 @@ double readsensor(int sensor)
   {
     // Get value from sensor
     sensor_value = laserpar[sensor];
+    int i;
+    for (i = 0; i < 10; i++) {
+      printf("%d ", sensor_value);
+    }
   }
   else if (sensor >= 10)
   {
@@ -1152,3 +1167,21 @@ double readsensor(int sensor)
   printf("returns laserpar\n");
   return sensor_value;
 }
+
+double dist_box(int sensor){
+  double sensor_value;
+  double angle;
+  double angle_rad;
+  double dist_box;
+  
+  sensor_value = readsensor(sensor);
+  printf("%f\n", sensor_value);
+
+  // First calculate the angle
+  angle_rad = asin((sin(90 * (M_PI / 180)) * 0.6) /sensor_value);
+  angle = abs(180 - (90 + angle_rad * (180/M_PI)));
+  // Find distance to box
+  dist_box = (sin(angle * (M_PI / 180)) * sensor_value) / sin(90 * (M_PI / 180));
+  return dist_box;
+}
+
