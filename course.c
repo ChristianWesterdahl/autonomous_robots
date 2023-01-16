@@ -703,7 +703,6 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
-      printf("changing sensor stop_fwd\n");
     }
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
@@ -782,9 +781,7 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
-      printf("changing sensor stop_line\n");
     }
-    if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     calibrated_sensorvalues = calibrate_line(linesensor);
     sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
       
