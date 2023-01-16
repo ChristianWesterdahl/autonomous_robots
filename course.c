@@ -495,9 +495,9 @@ int main(int argc, char **argv)
         printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
-      //mot.sensorstop = sensorstop(5, 0.2, 0);
+      mot.sensorstop = sensorstop(5, 0.2, 0);
       printf("snesor stop: %d\n", mot.sensorstop);
-      if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
+      if(line(dist, speed, dir, linecolor, false, true, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
@@ -699,7 +699,7 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
-      printf("changing sensor stop\n");
+      printf("changing sensor stop_fwd\n");
     }
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
@@ -775,13 +775,11 @@ void update_motcon(motiontype *p, odotype *o)
   //------------------------following line------------------------------------------
 
   case mot_line:
-    /*
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
-      printf("changing sensor stop\n");
+      printf("changing sensor stop_line\n");
     }
-    */
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     calibrated_sensorvalues = calibrate_line(linesensor);
     sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
@@ -798,6 +796,7 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = 0;
+      sensor_stop = 0;
     }
 
       // Stop if meeting af crossling line of any color
