@@ -703,8 +703,7 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->crossingline) 
     {
       calibrated_sensorvalues = calibrate_line(linesensor);
-      printf("line values: %f %f %f %f %f %f %f %f\n", calibrated_sensorvalues[0], calibrated_sensorvalues[1], calibrated_sensorvalues[2], calibrated_sensorvalues[3], calibrated_sensorvalues[4], calibrated_sensorvalues[5], calibrated_sensorvalues[6], calibrated_sensorvalues[7]);
-      if(find_line_min(calibrated_sensorvalues, 0, 0) == -1) {sensor_stop = true; printf("crossing line found\n");}
+      if(find_line_min(calibrated_sensorvalues, 0, 0) == -1) sensor_stop = true; 
     }
     if (p->sensorstop_active && !sensor_stop) sensor_stop = p->sensorstop; //condition check
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
@@ -1117,7 +1116,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     }
     else all_equal *= 0;
   }
-  if (all_equal == 1) return -1;
+  if (all_equal == 1 && sensor_values[0] < 0.2) return -1;
   else 
   {
     return chosen_index; 
