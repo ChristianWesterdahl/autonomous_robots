@@ -178,7 +178,7 @@ wall(dist, speed, dir, walldist, snesorStop)
 //methods
 enum ms course_methods[500] = {
   //course here
-  ms_fwd,
+  ms_fwd, //NEVER CHANGE THIS
   ms_line,
   ms_resetOdo,
   ms_turn,
@@ -194,7 +194,7 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  0.1, 0.2, 0, 0, 0, 0,
+  0.1, 0.2, 0, 0, 0, 0, //NEVER CHANGE THIS
   0.8, 0.2, 0, 0, //line
   -50.0/180.0*M_PI, 0.2,
   3, 0.4, 1, 5, 0.2, 0,
@@ -1159,8 +1159,8 @@ bool sensorstop(int sensor, double condition, int mode)
   
   sensor_value = readsensor(sensor);
 
-  printf("laser values: %f %f %f %f %f %f %f %f %f\n", laserpar[0], laserpar[1], laserpar[2], laserpar[3], laserpar[4], laserpar[5], laserpar[6], laserpar[7], laserpar[8]);
-  printf("sensor_value: %f\n", sensor_value);
+  //printf("laser values: %f %f %f %f %f %f %f %f %f\n", laserpar[0], laserpar[1], laserpar[2], laserpar[3], laserpar[4], laserpar[5], laserpar[6], laserpar[7], laserpar[8]);
+  if(sensor_value == 0) printf("sensor not connected!!!\n");
   // Now check if condition is true given the values
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
