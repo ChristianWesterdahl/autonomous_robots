@@ -169,7 +169,7 @@ double readsensor(int sensor);
 /*
 fwd(dist, speed, sensorStop, sensor, condition_distance, mode) #sensorStop: 0 off, 1 on #sensor: 0-8 laser, 10-14 ir #mode: 0 less than, 1 more than
 turn(angle, speed)
-line(dist, speed, dir, col, crossingLine, sensorStop) #col: 0-black, 1-white #dir: 0-right 1-left
+line(dist, speed, dir, col, crossingLine, sensorStop, sensor, condition_distance, mode) #col: 0-black, 1-white #dir: 0-right 1-left
 resetOdo()
 measure(laser_compensation)
 wall(dist, speed, dir, walldist, snesorStop)
@@ -190,7 +190,7 @@ enum ms course_methods[500] = {
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, //NEVER CHANGE THIS
-  2.0, 0.2, 1, 0, //line
+  2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ /*, 0 crossingLine*/, 1 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
   90.0/180.0*M_PI, 0.2,
   1, 0.4, 1, 4, 0.2, 0
   //course variables here
@@ -492,12 +492,16 @@ int main(int argc, char **argv)
         speed = course_vars[i_var]; i_var++;
         dir = course_vars[i_var]; i_var++;
         linecolor = course_vars[i_var]; i_var++;
-        printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
+        sensor_stop = (int) course_vars[i_var]; i_var++;
+        sensor = (int) course_vars[i_var]; i_var++;
+        sensor_dist = course_vars[i_var]; i_var++;
+        mode = (int) course_vars[i_var]; i_var++;
+        printf("follow: (%f,%f,%d,%d) #Sensorstop: %d, snesor: %d\n", dist, speed, dir, linecolor, sensor_stop, sensor);
         change_var = false;
       }
-      mot.sensorstop = sensorstop(5, 0.2, 0);
+      mot.sensorstop = sensorstop(sensor, sensor_dist, mode);
       printf("snesor stop: %d\n", mot.sensorstop);
-      if(line(dist, speed, dir, linecolor, false, true, mission.time)) 
+      if(line(dist, speed, dir, linecolor, false, sensor_stop, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
