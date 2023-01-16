@@ -163,6 +163,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor);
 bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(char *sensor, double condition, int mode);
+double readsensor(int sensor);
 
 //------------------------deffining the course---------------------------
 /*
@@ -178,6 +179,8 @@ wall(dist, speed, dir, walldist, sensorStop)
 enum ms course_methods[500] = {
   //course here
   ms_line,
+  ms_fwd,
+  ms_line,
   ms_resetOdo,
   ms_turn,
   ms_fwd,
@@ -186,7 +189,9 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  0.8, 0.2, 0, 0, //line
+  10.0, 0.2, 1, 0, //line
+  0.1, 0.4,
+  10.0, 0.2, 0, 0, //line
   90.0/180.0*M_PI, 0.2,
   0.5, 0.4
   //course variables here
@@ -487,7 +492,7 @@ int main(int argc, char **argv)
         change_var = false;
       }
       //mot.sensorstop = sensorstop(0, 10.0, 0);
-      if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
+      if(line(dist, speed, dir, linecolor, true, false, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
@@ -759,23 +764,24 @@ void update_motcon(motiontype *p, odotype *o)
   
   //------------------------following line------------------------------------------
   case mot_line:
-      calibrated_sensorvalues = calibrate_line(linesensor);
-      sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
+    calibrated_sensorvalues = calibrate_line(linesensor);
+    sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
       
-      remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
-      v_max = sqrt(2*0.5*fabs(remaining_dist));
-      v_delta = 0.0005 * (3-sensor_index);
+    remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
+    v_max = sqrt(2*0.5*fabs(remaining_dist));
+    v_delta = 0.005 * (3-sensor_index);
       
-      printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
-      // Check if destination is reached or sensors tell motor to stop.
-      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
-      {
-        p->finished = 1;
-        p->motorspeed_l = 0;
-        p->motorspeed_r = 0;
-      }
+    printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
+    // Check if destination is reached or sensors tell motor to stop.
+    printf("Remaining_dist: %f\n", remaining_dist);
+    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) //| mot.sensorstop)
+    {
+      p->finished = 1;
+      p->motorspeed_l = 0;
+      p->motorspeed_r = 0;
+    }
 
-    // Stop if meeting af crossling line of any color
+    // Stop if meeting af crossling line of black color
     if (mot.crossingline && (sensor_index == -1))
     {
       p->finished = 1;
@@ -783,11 +789,12 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_r = 0;
     }
 
-    if (sensor_index == -2)
-    {
-      printf("Error! - DO SOMETHING!");
-      p->motorspeed_l = 0;
-      p->motorspeed_r = 0;
+    if (sensor_index == -2){ // If we are nowhere near a line just drive forward until detecting one!
+      p->motorspeed_l = p->speedcmd;
+      p->motorspeed_r = p->speedcmd;
+      // Also reset odo;
+      p->startpos = (p->left_pos + p->right_pos) / 2;
+      break;
     }
 
     // Check if any speed  surpasses max allowed speed, or else set it.
@@ -812,15 +819,15 @@ void update_motcon(motiontype *p, odotype *o)
     else if (v_delta < 0) 
     {
       p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
-      p->motorspeed_r -= v_delta;
+      p->motorspeed_r = p->speedcmd; // -= v_delta;
     }
     // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
     else if (v_delta > 0)
     {
       p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
-      p->motorspeed_l += v_delta;
+      p->motorspeed_l = p->speedcmd; // v_delta;
     }
-    printf("Motorspeeds: l - %f, r - %f\n", p->motorspeed_l, p->motorspeed_r);
+    printf("Motorspeeds: l : %f, r : %f\n", p->motorspeed_l, p->motorspeed_r);
     break;
 
   //------------------------------------------Wall-----------------------------------------------
@@ -1026,7 +1033,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
   // using the position of the lowest calibrated linesensor.
   // Note that we need to loop backwards over the values
 
-  int chosen_index = -2;
+  int chosen_index = -3;
   int i;
   int all_equal = 1;
   double sum = 0.0;
@@ -1093,7 +1100,8 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     }
     else all_equal *= 0;
   }
-  if (all_equal == 1) return -1;
+  if (all_equal == 1 && sensor_values[0] <= 0.2) return -1; //Crossing black line
+  if (all_equal == 1 && sensor_values[0] > 0.5) return -2; // No line in sight.
   else 
   {
     return chosen_index; 
