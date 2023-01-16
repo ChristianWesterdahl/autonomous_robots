@@ -190,9 +190,9 @@ enum ms course_methods[500] = {
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
-  2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ /*, 0 crossingLine*/, 1 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+  2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
   90.0/180.0*M_PI, 0.2,
-  1, 0.4, 1, 1, 4, 0.2, 0
+  1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -454,7 +454,7 @@ int main(int argc, char **argv)
         sensor = (int) course_vars[i_var]; i_var++;
         sensor_dist = course_vars[i_var]; i_var++;
         mode = (int) course_vars[i_var]; i_var++;
-        printf("fwd: (%f,%f) #sensorstop %d\n", dist, speed, sensor_stop);
+        printf("fwd: (%f,%f) #crossing:%d  sensorstop: %d, sensor: %d\n", dist, speed, crossing_line, sensor_stop, sensor);
         change_var = false;
       }
       mot.sensorstop = sensorstop(sensor, sensor_dist, mode); // Replace with course_vars[];
@@ -493,15 +493,16 @@ int main(int argc, char **argv)
         speed = course_vars[i_var]; i_var++;
         dir = course_vars[i_var]; i_var++;
         linecolor = course_vars[i_var]; i_var++;
+        crossing_line = (int) course_vars[i_var]; i_var++;
         sensor_stop = (int) course_vars[i_var]; i_var++;
         sensor = (int) course_vars[i_var]; i_var++;
         sensor_dist = course_vars[i_var]; i_var++;
         mode = (int) course_vars[i_var]; i_var++;
-        printf("follow: (%f,%f,%d,%d) #Sensorstop: %d, snesor: %d\n", dist, speed, dir, linecolor, sensor_stop, sensor);
+        printf("follow: (%f,%f,%d,%d) #CrossingLine: %d , Sensorstop: %d, snesor: %d\n", dist, speed, dir, linecolor, crossing_line, sensor_stop, sensor);
         change_var = false;
       }
       mot.sensorstop = sensorstop(sensor, sensor_dist, mode);
-      if(line(dist, speed, dir, linecolor, false, sensor_stop, mission.time)) 
+      if(line(dist, speed, dir, linecolor, crossing_line, sensor_stop, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
@@ -786,7 +787,7 @@ void update_motcon(motiontype *p, odotype *o)
     }
     calibrated_sensorvalues = calibrate_line(linesensor);
     sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
-      
+    if (sensor_index == -1 && p->crossingline) {sensor_stop = true; printf("crossing line found_line\n");};
     remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
     v_delta = 0.0005 * (3-sensor_index);
