@@ -20,6 +20,11 @@
 #include "componentserver.h"
 #include "xmlio.h"
 
+// Define pi
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
+
 
 struct xml_in *xmldata;
 struct xml_in *xmllaser;
@@ -184,7 +189,7 @@ enum ms course_methods[500] = {
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   //1.0, 0.2, 0, 0, //line
-  90/180*M_PI, 0.2,
+  90/180.0*M_PI, 0.2,
   0.5, 0.4
   //course variables here
   };
@@ -433,6 +438,7 @@ int main(int argc, char **argv)
       courseLength = n;
       acceleration = 0.5;
       mission.state = course_methods[courseLength-n];
+      printf("Mission state: %d\n", mission.state);
       change_var = 1;
     break;
     
@@ -461,9 +467,9 @@ int main(int argc, char **argv)
       {
         angle = course_vars[i_var]; i_var++;
         speed = course_vars[i_var]; i_var++;
-        //printf("turn: (%f,%f)\n", i_var, angle, speed);
         change_var = false;
       }
+      printf("turn: (%d,%f)\n", i_var, angle);
       if (turn(angle, speed, mission.time)) 
       {
         n = n-1;
@@ -694,16 +700,19 @@ void update_motcon(motiontype *p, odotype *o)
 
   //------------------------------------turning-----------------------------------
   case mot_turn:
-    printf("TURNING THE ROBOT!");
+    printf("TURNING THE ROBOT!\n");
+    printf("Angle: %f\n", p->angle);
+
     // If we have to turn left (the angle is positive)
     if (p->angle>0){
-
+      printf("POSITIVE ANGLE!\n");
       //Calculate the remaining angle to turn:
       remaining_angle = ((p->angle*p->w)/2) - (p->right_pos-p->startpos);
 	    v_max = sqrt(2 * 0.5 * fabs(remaining_angle));
 
       // Have we finished turning? If so stop!
       if (p->right_pos-p->startpos > (p->angle*p->w)/2){
+        printf("WE STOP TURNING!\n");
         p->motorspeed_r=0;
         p->motorspeed_l=0;
         p->finished=1;
@@ -719,6 +728,7 @@ void update_motcon(motiontype *p, odotype *o)
       //Else, if not angular goal is reached, we accelerate
       else
       {
+        printf("Accelerate!\n");
         //If we hit max speed on any wheel (in positive or negative direction, set to max speed)
         if ((p->motorspeed_r > p->speedcmd/2) | (p->motorspeed_l < -p->speedcmd/2))
         {
