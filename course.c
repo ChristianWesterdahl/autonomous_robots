@@ -100,6 +100,8 @@ typedef struct
 #define DELTA_M (M_PI * WHEEL_DIAMETER / 2000)
 #define DEFAULT_ROBOTPORT 24902
 #define k 0.001
+#define KA 16.0 // For ir sensor
+#define KB 76.0 // For ir sensor
 
 typedef struct
 {                          // input signals
@@ -153,7 +155,7 @@ int fwd(double dist, double speed, double acceleration, bool sensorstop, int tim
 int turn(double angle, double speed, int time);
 //int follow(double dist, double speed, int time, int dir); // New (0 = left, 1 = right)
 int line(double dist, double speed, int dir, int linecolor, bool crossingline, bool sensorstop, int time); // New
-int wall(double speed, int dir, int time, double walldist, double dist, bool sensorstop); // New
+int wall(double dist, double speed, int dir, double walldist, bool sensorstop, int time);
 //auxilory function (all new)
 double *calibrate_line(symTableElement *linesensor_values);
 //int find_line_min(double *sensor_values, int orientation); old follow line
@@ -169,11 +171,14 @@ turn(angle, speed)
 line(dist, speed, dir, col, crossingLine, sensorStop) #col: 0-black, 1-white #dir: 0-right 1-left
 resetOdo()
 measure(laser_compensation)
+wall(dist, speed, dir, walldist, sensorStop)
 */
 
 //methods
 enum ms course_methods[500] = {
   //course here
+  ms_line,
+  ms_resetOdo,
   ms_turn,
   ms_fwd,
   ms_end
@@ -181,7 +186,8 @@ enum ms course_methods[500] = {
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
-  90/180.0*M_PI, 0.2,
+  0.8, 0.2, 0, 0, //line
+  90.0/180.0*M_PI, 0.2,
   0.5, 0.4
   //course variables here
   };
@@ -236,7 +242,7 @@ int main(int argc, char **argv)
 {
   bool change_var; //to change the method variable counter var_i
   int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration;
-  double dist = 0, angle = 0, speed = 0, acceleration = 0;
+  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0;
   // install sighandlers
   if (1)
   {
@@ -442,7 +448,7 @@ int main(int argc, char **argv)
         printf("fwd: (%f,%f)\n", dist, speed);
         change_var = false;
       }
-      //mot.sensorstop = sensorstop("r0", 10.0, 0); // Replace with course_vars[];
+      //mot.sensorstop = sensorstop(0, 10.0, 0); // Replace with course_vars[];
       if (fwd(dist, speed, acceleration, 0, mission.time)) 
       {
         n = n-1;
@@ -480,23 +486,43 @@ int main(int argc, char **argv)
         printf("follow: (%f,%f,%d,%d)\n", dist, speed, dir, linecolor);
         change_var = false;
       }
-      //mot.sensorstop = sensorstop("r0", 10.0, 0);
-      printf("follow middle");
+      //mot.sensorstop = sensorstop(0, 10.0, 0);
       if(line(dist, speed, dir, linecolor, false, false, mission.time)) 
       {
         n = n-1;
         mission.state = course_methods[courseLength-n];
         change_var = true;
-        
       }
     break;
 
+    //reset odometry to (0,0,0)
     case ms_resetOdo:
       reset_odo(&mot, &odo);
       n = n-1;
       mission.state = course_methods[courseLength-n];
       change_var = true;
       printf("odo reset\n");      
+    break;
+
+    //follow the wall
+    case ms_wall:
+      if (change_var) 
+      {
+        dist = course_vars[i_var]; i_var++;
+        speed = course_vars[i_var]; i_var++;
+        dir = course_vars[i_var]; i_var++;
+        walldist = course_vars[i_var]; i_var++;
+        //sensorstop = course_vars[i_var]; i_var++;
+        printf("wall: (%f,%f,%d,%f)\n", dist, speed, dir, walldist);
+        change_var = false;
+      }
+      //mot.sensorstop = sensorstop(0, 10.0, 0);
+      if(wall(dist, speed, dir, walldist, false, mission.time)) 
+      {
+        n = n-1;
+        mission.state = course_methods[courseLength-n];
+        change_var = true;
+      }
     break;
 
     //end
@@ -634,6 +660,11 @@ void update_motcon(motiontype *p, odotype *o)
       p->startpos = (p->left_pos + p->right_pos) / 2;
       p->curcmd = mot_line;
       break;
+
+    case mot_wall:
+      p->startpos = (p->left_pos + p->right_pos) / 2;
+      p->curcmd = mot_wall;
+      break;
     }
 
     p->cmd = 0;
@@ -728,21 +759,21 @@ void update_motcon(motiontype *p, odotype *o)
   
   //------------------------following line------------------------------------------
   case mot_line:
-    calibrated_sensorvalues = calibrate_line(linesensor);
-    sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
-
-    remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
-    v_max = sqrt(2*0.5*fabs(remaining_dist));
-    v_delta = 0.0005 * (3-sensor_index);
+      calibrated_sensorvalues = calibrate_line(linesensor);
+      sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
       
-    printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
-    // Check if destination is reached or sensors tell motor to stop.
-    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) // | mot.sensorstop)
-    {
-      p->finished = 1;
-      p->motorspeed_l = 0;
-      p->motorspeed_r = 0;
-    }
+      remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
+      v_max = sqrt(2*0.5*fabs(remaining_dist));
+      v_delta = 0.0005 * (3-sensor_index);
+      
+      printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
+      // Check if destination is reached or sensors tell motor to stop.
+      if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) | mot.sensorstop)
+      {
+        p->finished = 1;
+        p->motorspeed_l = 0;
+        p->motorspeed_r = 0;
+      }
 
     // Stop if meeting af crossling line of any color
     if (mot.crossingline && (sensor_index == -1))
@@ -792,7 +823,8 @@ void update_motcon(motiontype *p, odotype *o)
     printf("Motorspeeds: l - %f, r - %f\n", p->motorspeed_l, p->motorspeed_r);
     break;
 
-  //--------------------------------------------wall---------------------------------------------
+  //------------------------------------------Wall-----------------------------------------------
+  
   case mot_wall:
     remaining_dist = p->dist -((p->right_pos + p->left_pos) / 2 - p->startpos); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
@@ -892,6 +924,7 @@ void update_motcon(motiontype *p, odotype *o)
   break;
 
   //------------------------------------------stopping-------------------------------------------
+  
   case mot_stop:
     p->motorspeed_l = 0;
     p->motorspeed_r = 0;
@@ -944,7 +977,7 @@ int line(double dist, double speed, int dir, int linecolor, bool crossingline, b
     return mot.finished;
 }
 
-int wall(double speed, int dir, int time, double walldist, double dist, bool sensorstop)
+int wall(double dist, double speed, int dir, double walldist, bool sensorstop, int time)
 {
   if (time == 0)
   {
@@ -1098,24 +1131,10 @@ bool compare_floats(float f1, float f2)
 
 bool sensorstop(char *sensor, double condition, int mode)
 {
-  // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor
-  if (sensor == 'N') return false;
-
-  int index;
   double sensor_value;
-  if (sensor[0] == 'l')
-  {
-    sscanf(sensor[1], "%d", &index);
-    // Get value from sensor
-    sensor_value = laserpar[index];
-  }
-  else if (sensor[0] == 'r')
-  {
-    sscanf(sensor[1], "%d", &index);
-    // Get value from sensor
-    sensor_value = irsensor->data[index];
-  }
   
+  sensor_value = readsensor(sensor);
+
   // Now check if condition is true given the values
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
