@@ -184,24 +184,15 @@ enum ms course_methods[500] = {
   ms_turn,
   ms_fwd,
   ms_resetOdo,
-  ms_turn,
-  ms_fwd,
-  ms_resetOdo,
-  ms_turn,
-  ms_fwd,
   ms_end
   };
 
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, //NEVER CHANGE THIS
-  0.8, 0.2, 0, 0, //line
-  -50.0/180.0*M_PI, 0.2,
-  3, 0.4, 1, 5, 0.2, 0,
+  2.0, 0.2, 1, 0, //line
   90.0/180.0*M_PI, 0.2,
-  1, 0.4, 0, 0, 0, 0,
-  -90.0/180.0*M_PI, 0.2,
-  3, 0.3, 0, 5, 0.2, 0
+  1, 0.4, 1, 4, 0.2, 0
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -466,7 +457,7 @@ int main(int argc, char **argv)
         change_var = false;
       }
       mot.sensorstop = sensorstop(sensor, sensor_dist, mode); // Replace with course_vars[];
-      printf("sensorStop: %d\n", mot.sensorstop);
+      //printf("sensorStop: %d\n", mot.sensorstop);
       if (fwd(dist, speed, acceleration, sensor_stop, mission.time)) 
       {
         n = n-1;
@@ -699,7 +690,7 @@ void update_motcon(motiontype *p, odotype *o)
   double sensor_value;
   int i;
   double com;
-  bool sensor_stop;
+  bool sensor_stop = false;
 
   switch (p->curcmd)
   {
@@ -708,13 +699,16 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
+      printf("changing sensor stop\n");
     }
+    if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
     {  
       p->finished = 1;
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
-      p->sensorstop = 0;
+      p->sensorstop = false;
+      sensor_stop = false;
     }
     else
     {
@@ -785,8 +779,10 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active) 
     {
       sensor_stop = p->sensorstop;
+      printf("changing sensor stop\n");
     }
     */
+    if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     calibrated_sensorvalues = calibrate_line(linesensor);
     sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
       
