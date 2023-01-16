@@ -1139,3 +1139,22 @@ bool sensorstop(char *sensor, double condition, int mode)
   if (mode == 0) return sensor_value <= condition ? true : false; // If sensor value is less than condition, the robot should stop!
   else if (mode == 1) return sensor_value >= condition? true : false; // If sensor value is more than condition, the robot should stop!
 }
+
+double readsensor(int sensor)
+{
+  // *sensor is a string determining which sensor to check, l0 for the first lasersensor and r0 for the first infrared sensor 
+  // if (sensor == 'N') return false;
+  double sensor_value;
+  if (sensor < 10)
+  {
+    // Get value from sensor
+    sensor_value = laserpar[sensor];
+  }
+  else if (sensor >= 10)
+  {
+    // Get value from sensor
+    sensor_value = irsensor->data[sensor-10];
+    sensor_value = (KA)/(sensor_value - KB);
+  }
+  return sensor_value;
+}
