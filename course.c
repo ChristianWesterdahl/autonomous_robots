@@ -819,6 +819,7 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = 0;
+      p->crossingline = false;
       sensor_stop = 0;
     }
 
