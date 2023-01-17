@@ -186,6 +186,14 @@ enum ms course_methods[500] = {
   //driving back and in front of box gate---------
   ms_resetOdo,
   ms_fwd,
+  ms_resetOdo,
+  ms_turn,
+  ms_fwd,
+  ms_fwd,
+  ms_turn,
+  ms_line,
+  ms_resetOdo,
+  ms_turn,
   ms_end
   };
 
@@ -198,12 +206,18 @@ double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
   //Todo: add measure distance
   //moving box--------------------------
-  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
   0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving box
   
   //driving back and in front of box gate-------------------
-  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/ //going backwards
-
+  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //going backwards
+  -90.0/180.0*M_PI /*angle*/, 0.2, /*speed*/ //turn to black line
+  2 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving to black line
+  0.15 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving to black line
+  90.0/180.0*M_PI /*angle*/, 0.2, /*speed*/ //turn to black line
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till box gate
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/ //turn to black line
+  
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -799,12 +813,14 @@ void update_motcon(motiontype *p, odotype *o)
     calibrated_sensorvalues = calibrate_line(linesensor);
     sensor_index = find_line_min(calibrated_sensorvalues, mot.followDir, mot.linecolor); // 0, hold right, 1 hold left.
     if (sensor_index == -1 && p->crossingline) {sensor_stop = true; printf("crossing line found_line\n");};
-      
+     
     remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
-    v_delta = 0.005 * (3-sensor_index);
+    v_delta = 0.005 * (2-sensor_index);
       
+    printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
     // Check if destination is reached or sensors tell motor to stop.
+    //printf("Remaining_dist: %f\n", remaining_dist);
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) //| mot.sensorstop)
     {
       p->finished = 1;
@@ -852,14 +868,17 @@ void update_motcon(motiontype *p, odotype *o)
     else if (v_delta < 0) 
     {
       p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
-      p->motorspeed_r = p->speedcmd; // -= v_delta;
+      p->motorspeed_l = fmax(p->motorspeed_l, 0.1);
+      p->motorspeed_r = p->speedcmd;//-= v_delta;
     }
     // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
     else if (v_delta > 0)
     {
-      p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
-      p->motorspeed_l = p->speedcmd; // v_delta;
+      p->motorspeed_r -= fmax(v_delta,0.1); // Delta in this case is positive, we should decrease speed on right wheel
+      p->motorspeed_r = fmax(p->motorspeed_r, 0.1);
+      p->motorspeed_l = p->speedcmd;
     }
+    //printf("Motorspeeds: l : %f, r : %f\n", p->motorspeed_l, p->motorspeed_r);
     break;
 
   //------------------------------------------Wall-----------------------------------------------
@@ -1046,10 +1065,13 @@ double *calibrate_line(symTableElement *linesensor_values)
   // This function converts uncalibrated linesensor values to calibrated
   // using the linear transformation described in the calibration exercise.
   static double r[8];
+  float a = 53.0;
+  float b = 97.0;
   int i;
 
+
   for (i = 0; i < 8; i++){
-    r[i] = (linesensor_values->data[i]) / 255.0;
+    r[i] = (linesensor_values->data[i]-a)/(b-a);
   }
   return r;
 }
@@ -1065,6 +1087,9 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
   int all_equal = 1;
   double sum = 0.0;
 
+  printf("snesor_values: %f %f %f %f %f %f %f %f\n", sensor_values[0],sensor_values[1],sensor_values[2],sensor_values[3],sensor_values[4],sensor_values[5],sensor_values[6],sensor_values[7]);
+  printf("Linecolor: %d\n", linecolor);
+  printf("SENSOR VALUES: ");
   if (linecolor == 0)
   {
     double curr_min = 1.0;
@@ -1073,7 +1098,8 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     {
       if (orientation == 0)
       {
-        if (sensor_values[i] < curr_min)
+        printf(" %f", sensor_values[i]);
+        if (sensor_values[i] < 0.45)
         {
           curr_min = sensor_values[i];
           chosen_index = i;
@@ -1081,10 +1107,12 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       }
       else
       {
-        if (sensor_values[i] <= curr_min)
+        if (sensor_values[i] < 0.45)
         {
           curr_min = sensor_values[i];
           chosen_index = i;
+          break;
+
         }
       }
       // Finally we desire to check if all the sensor values are the same
@@ -1121,13 +1149,13 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
   }
   for (i = 0; i<8; i++)
   {
-    if (compare_floats(sum/8.0, sensor_values[i]))
+    if (sensor_values[i] <= 0.45)
     {
       all_equal *= 1;
     }
     else all_equal *= 0;
   }
-  if (all_equal == 1 && sensor_values[0] <= 0.2) return -1; //Crossing black line
+  if (all_equal == 1 && sensor_values[0] <= 0.45) return -1; //Crossing black line
   if (all_equal == 1 && sensor_values[0] > 0.5) return -2; // No line in sight.
   else 
   {
@@ -1153,7 +1181,7 @@ bool compare_floats(float f1, float f2)
 {
   // Code taken from: 
   // https://how-to.fandom.com/wiki/Howto_compare_floating_point_numbers_in_the_C_programming_language
-  float precision = 0.00001;
+  float precision = 0.3;
   if (((f1 - precision) < f2) && ((f1 + precision) > f2)) // Check if we are within interval
   {
     return true;
