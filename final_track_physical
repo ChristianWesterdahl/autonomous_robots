@@ -1,42 +1,55 @@
-%%% initialize the laser module
+%%% Initialize the laser module
 laser "scanpush cmd='zoneobst' "
 
 %%% FINAL TRACK SIMULATION
 
-%Use laser to measure x-distance
-followline "bl" @v 0.25:($drivendist >= 0.01)
-followline "bl" :($l7 >= 1.5)
-eval sin(1.222)*$l8
+%%% X-distance measurement from start to box
+followline "bl" @v 0.2 :($drivendist >= 0.01)
+pi = 3.14159265359
+hypodist = $l8
+angle = asin((sin(90 * (pi/180)) * 0.6) / hypodist)
+angle = abs(180 - (90 + angle * (180/pi)))
+distbox = (sin(angle * (pi/180)) * hypodist) / sin(90 * (pi/180))
+eval distbox
+
+% Make the robot say distance to box
+tointstring distbox
+stringcat "Distance to box  " distbox
+speak "$string"
 
 %Move to box
-followline "bl" @v 0.25:($motionstatus == 1)
+followline "bl" @v 0.2:($motionstatus == 1)
 ignoreobstacles
-drive @v 0.5:($crossingblackline == 1)
+drive @v 0.3:($crossingblackline == 1)
 ignoreobstacles
 fwd 0.15
 
-% Go backwards and pass the gate
+% Go backwards and move in front of the box gate
 fwd -1  
 turn -90 @v 0.2
 drive :($crossingblackline == 1)
 $crossingblackline = 0
 turnr 0.1 75
-followline "bm" @v 0.5:($crossingblackline == 1)
+followline "bm" @v 0.4:($crossingblackline == 1)
 fwd 0.25 @v 0.2
 turn 90
-$crossingblackline = 0
 ignoreobstacles
-followline "bm" @v 0.5:($crossingblackline == 1)
+
+% Pass through the gate
+followline "bm" @v 0.4:($crossingblackline == 1)
 ignoreobstacles
 fwd 0.1
 ignoreobstacles
 followline "bm" @v 0.35:($crossingblackline == 1)
 
-%%%%% THIS WORKS
-
 % Drive until first gate
 followline "bm" @v 0.2 :($l0 <= 0.75)
 x01 = $odox
+
+%Calculate y distance to gate
+ydist = sin(20 * (pi/180))*$l0
+
+% Calculations to move robot to center of the gate
 followline "bm" :($l0 >= 0.75)
 x02 = $odox
 x0 = x01 + ((x02-x01)/2)
@@ -45,53 +58,59 @@ x11 = $odox
 followline "bm" :($l0 >= 0.75)
 x12 = $odox
 x1 = x11 + ((x12-x11)/2)
-dist = abs((x1-x0)/2)
-drive @v -0.2:($drivendist >= (abs((x12-x11)/2)+dist-0.15))
-turn 90
+disttomid = abs((x1-x0)/2)
+drivebackwards = abs((x12-x11)/2)+disttomid-ydist
+drive @v -0.2:($drivendist >= drivebackwards)
 
-% Drive until wall and turn 
+% Drive until wall in front
+turn 90
 ignoreobstacles
 drive @v 0.3 :($l4 <= 0.2)
 turn 90
 
 % Follow the wall until finding second gate
-xdisttogate = sin(1.222)*$l8
 followwall "r" 0.30 @v 0.2 :($l8 >= 0.5)
 x0 = $odox
 drive :($l8 <= 0.5)
 x11 = $odox
+
+% Calculate x and y distance to gate
+xdist = sin(70 * (pi/180))*$l8
+ydist = sin(20 * (pi/180))*$l8
+
+% Calculations to move robot to center of the gate
 drive :($l8 >= 0.5)
 x12 = $odox
 x1 = x11 + ((x12-x11)/2)
-dist = abs((x1-x0)/2)
-drive @v -0.2:($drivendist >= (abs((x12-x11)/2)+dist-0.15))
+disttomid = abs((x1-x0)/2)
+drivebackwards = abs((x12-x11)/2)+disttomid-ydist
+drive @v -0.2:($drivendist >= drivebackwards)
 
 % Turn and drive though the second gate
-ignoreobstacles
 turn -90 @v 0.2
-drive :($drivendist >= (xdisttogate+0.30))
+drive :($drivendist >= (xdist+0.4))
 turn -90
 
-% Follow the out side of the wall.
-fwd 0.25 @v 0.2
-followwall "r" 0.3 @v 0.4 :($l8 >= 0.5)
+% Follow the side of the wall
+fwd 0.25
+followwall "r" 0.3 @v 0.25 :($l8 >= 0.75)
 drive :($crossingblackline == 1)
 $crossingblackline = 0
 
 % Turn and drive through the third gate
-fwd 0.15 @v 0.2
+fwd 0.25 @v 0.2
 turn -90
-followline "bm" @v 0.4:($drivendist >= 0.75)
+followline "bm" @v 0.4:($drivendist >= 1.0)
 
 % turn around
-turn -180 @v 0.2
+turn 180 @v 0.2
 ignoreobstacles
 
 % Follow line until white line
 followline "bm" @v 0.4:($crossingblackline == 1)
 $blacklinefound =0
-followline "bm" :($drivendist >=0.5 & $blacklinefound == 0)
-turn 30
+followline "bm" @v 0.2:($drivendist >=0.5 & $blacklinefound == 0)
+turnr 0.15 45
 
 %Move to white line and pass 2 more gates
 followline "wm" @v 0.3:($crossingblackline == 1)
@@ -103,7 +122,7 @@ ignoreobstacles
 followline "bm" @v 0.2:($l4 <= 0.2)
 
 % Open the door
-turn 90 @v 0.2
+turn 90 
 drive :($l8 >= 0.5)
 fwd 0.5
 turn -90
@@ -113,7 +132,7 @@ turn -180 @v 0.5
 fwd 0.4 @v 0.2
 turn 90
 ignoreobstacles
-drive @v 0.15:($crossingblackline == 1)
+drive @v 0.2:($crossingblackline == 1)
 ignoreobstacles
 fwd 0.2 @v 0.2
 ignoreobstacles
