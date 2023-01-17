@@ -138,6 +138,7 @@ enum ms
   ms_line,
   ms_resetOdo,
   ms_wall,
+  ms_measure,
   ms_end
 };
 
@@ -164,6 +165,7 @@ bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(int sensor, double condition, int mode);
 double readsensor(int sensor);
+double measure();
 
 //------------------------deffining the course---------------------------
 /*
@@ -179,6 +181,7 @@ wall(dist, speed, dir, walldist, snesorStop)
 enum ms course_methods[500] = {
   //course here
   ms_fwd, //NEVER CHANGE THIS
+  ms_measure,
   //moving box-----------
   ms_line, //line till moving box
   ms_resetOdo, 
@@ -372,7 +375,7 @@ int main(int argc, char **argv)
 {
   bool change_var, sensor_stop, crossing_line; //to change the method variable counter var_i
   int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration, sensor = 0, mode = 0;
-  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0, sensor_dist = 0;
+  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0, sensor_dist = 0, measurement = 0;
   // install sighandlers
   if (1)
   {
@@ -665,6 +668,16 @@ int main(int argc, char **argv)
         change_var = true;
       }
     break;
+
+    //taking measurement
+    case ms_measure:
+      measurement = measure();
+      n = n-1;
+      mission.state = course_methods[courseLength-n];
+      change_var = true;
+      printf("measurement: %f\n", measurement);      
+    break;
+
 
     //end
     case ms_end:
@@ -1297,4 +1310,19 @@ double readsensor(int sensor)
     sensor_value = (KA)/(sensor_value - KB);
   }
   return sensor_value;
+}
+
+double measure() 
+{
+  double sensor_value;
+  double angle;
+  double angle_rad;
+  double distance;
+  
+  sensor_value = readsensor(8);
+
+  angle_rad = asin((sin(90.0*(M_PI/180.0)) * 0.18) / sensor_value);
+  angle = abs(180.0 - (90.0 + angle_rad * (180.0/M_PI)));
+  distance = (sin(angle * (M_PI/180.0)) * sensor_value) / sin(90.0 * (M_PI/180.0));
+  return distance;
 }
