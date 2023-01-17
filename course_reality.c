@@ -821,21 +821,13 @@ void update_motcon(motiontype *p, odotype *o)
     printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
     // Check if destination is reached or sensors tell motor to stop.
     //printf("Remaining_dist: %f\n", remaining_dist);
-    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) //| mot.sensorstop)
+    if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) || sensor_stop)
     {
       p->finished = 1;
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = 0;
       sensor_stop = 0;
-    }
-
-    // Stop if meeting af crossling line of black color
-    if (mot.crossingline && (sensor_index == -1))
-    {
-      p->finished = 1;
-      p->motorspeed_l = 0;
-      p->motorspeed_r = 0;
     }
 
     if (sensor_index == -2){ // If we are nowhere near a line just drive forward until detecting one!
