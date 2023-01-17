@@ -181,18 +181,23 @@ enum ms course_methods[500] = {
   ms_fwd, //NEVER CHANGE THIS
   ms_line,
   ms_resetOdo,
-  ms_turn,
   ms_fwd,
-  ms_resetOdo,
   ms_end
   };
 
+//fwd: 1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/
+//line: 2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+//turn: 90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,
+    
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
 double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
-  2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
-  90.0/180.0*M_PI, 0.2,
-  1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/
+  //Todo: add measure distance
+  //moving box--------------------------
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+  0.15 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/ //moving box
+  
+  //driving back and in front of box gate-------------------
   //course variables here
   };
 //------------------------end of course----------------------------------
