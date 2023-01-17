@@ -186,11 +186,14 @@ enum ms course_methods[500] = {
   //driving back and in front of box gate---------
   ms_resetOdo,
   ms_fwd,
+  ms_turn,
+  ms_fwd,
+  ms_fwd,
   ms_end
   };
 
-//fwd: 1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/
-//line: 2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+//fwd: 1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+//line: 2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,
 //turn: 90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,
     
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
@@ -198,12 +201,15 @@ double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
   //Todo: add measure distance
   //moving box--------------------------
-  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
-  0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving box
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till moving box
+  0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/                         //moving box
   
   //driving back and in front of box gate-------------------
-  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/ //going backwards
-
+  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //going backwards
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face line
+  2.0 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving to line
+  0.2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/                         //driving onto line
+  
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -714,6 +720,7 @@ void update_motcon(motiontype *p, odotype *o)
   case mot_move:
     if (p->crossingline) 
     {
+      printf("testing crossing line\n");
       calibrated_sensorvalues = calibrate_line(linesensor);
       if(find_line_min(calibrated_sensorvalues, 0, 0) == -1) sensor_stop = true; 
     }
@@ -725,6 +732,7 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = false;
+      p->crossingline = false;
       sensor_stop = false;
     }
     else
@@ -802,7 +810,7 @@ void update_motcon(motiontype *p, odotype *o)
       
     remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
-    v_delta = 0.005 * (3-sensor_index);
+    v_delta = 0.0035 * (3-sensor_index);
       
     // Check if destination is reached or sensors tell motor to stop.
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) //| mot.sensorstop)
