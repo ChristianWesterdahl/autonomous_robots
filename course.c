@@ -188,6 +188,7 @@ enum ms course_methods[500] = {
   ms_fwd,
   ms_turn,
   ms_fwd,
+  ms_resetOdo,
   ms_fwd,
   ms_end
   };
@@ -208,7 +209,7 @@ double course_vars[500] = {
   -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //going backwards
   -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face line
   2.0 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving to line
-  0.2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/                         //driving onto line
+  0.2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/                         //driving onto line
   
   //course variables here
   };
@@ -728,11 +729,11 @@ void update_motcon(motiontype *p, odotype *o)
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
     { 
+      printf("move stopped\n");
       p->finished = 1;
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = false;
-      p->crossingline = false;
       sensor_stop = false;
     }
     else
@@ -819,7 +820,6 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
       p->sensorstop = 0;
-      p->crossingline = false;
       sensor_stop = 0;
     }
 
