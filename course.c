@@ -201,6 +201,56 @@ enum ms course_methods[500] = {
   ms_line, //line till next gate
   ms_resetOdo,
   ms_line, //drive untill first gate
+  //Driving throug first and second gate--------------
+  ms_fwd, //driving up to first gate
+  ms_turn, //turning to face thrug first gate
+  ms_fwd, //forward untill wall
+  ms_resetOdo,
+  ms_turn,  //turning to follow wall
+  ms_fwd,   //driwing to second game
+  ms_resetOdo,
+  ms_fwd,   //driving in front of second gate
+  ms_turn,  //facing throug second gate
+  ms_fwd,   //driving throug second gate
+  ms_resetOdo,
+  ms_turn,  //turning towards line
+  ms_fwd,   //driving to black line
+  ms_resetOdo,
+  ms_fwd,   //drive onto line
+  ms_turn, //turning towards third gate
+  ms_line, //driving throug third gate
+  ms_resetOdo,
+  ms_turn, //turning 180
+  ms_line, //back throug gate to crossing line
+  ms_resetOdo,
+  //Driwing on white line------------
+  ms_fwd,  //driving to white line
+  ms_resetOdo,
+  ms_turn, //turning onto white line
+  ms_line, //driving on white line
+  ms_fwd, //driving onto line
+  ms_resetOdo,
+  ms_turn, //turning towards garage
+  ms_line, //driving to garage
+  //parking in garage------------
+  ms_resetOdo,
+  ms_turn, //turning in front of door
+  ms_fwd, //drive till end of door
+  ms_resetOdo,
+  ms_fwd, //drive clear of the door
+  ms_resetOdo,
+  ms_turn, //turn to drive past door
+  ms_fwd,  //drive passt door
+  ms_resetOdo,
+  ms_turn, //open door
+  ms_fwd,  //driving back past garage gate
+  ms_resetOdo,
+  ms_turn, //turning towards line
+  ms_fwd,  //driving back to line
+  ms_resetOdo,
+  ms_fwd,  //driving onto line
+  ms_turn, //turning to go into gate
+  ms_fwd,  //drive into garage
   ms_end
   };
 
@@ -230,9 +280,46 @@ double course_vars[500] = {
   10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till midt gate
   0.1 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving throug midt gate
   10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till next gate
-  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 0 /*crossingLine*/, 1 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/    //line till next gate
-
-  //course variables here
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 0 /*crossingLine*/, 1 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  //Driving throug first and second gate--------------
+  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  2.0 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  3 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 1 /*sensorstop*/, 8 /*snesor*/, 0.5 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  0.45 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.8 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  3 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.5 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.5 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  1 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 0 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till box gates
+  180.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  //following white line--------------------
+  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  30.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 1 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  //parking in garage-------------------
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 1 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  0.48 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  -180.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.4 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  90.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  2 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+  0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+  90.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.8 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
   };
 //------------------------end of course----------------------------------
 
@@ -746,7 +833,6 @@ void update_motcon(motiontype *p, odotype *o)
       if(find_line_min(calibrated_sensorvalues, 0, 0) == -1) sensor_stop = true; 
     }
     if (p->sensorstop_active && !sensor_stop) sensor_stop = p->sensorstop; //condition check
-    if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
     { 
       p->finished = 1;
@@ -822,7 +908,6 @@ void update_motcon(motiontype *p, odotype *o)
   case mot_line:
     if (p->sensorstop_active) 
     {
-
       sensor_stop = p->sensorstop;
     }
     calibrated_sensorvalues = calibrate_line(linesensor);
@@ -831,7 +916,7 @@ void update_motcon(motiontype *p, odotype *o)
       
     remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
-    v_delta = 0.0035 * (3-sensor_index);
+    v_delta = 0.0035 * (4-sensor_index);
       
     // Check if destination is reached or sensors tell motor to stop.
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) || sensor_stop)
@@ -1118,7 +1203,6 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     // Loop backwards over the input array of sensor values:
     for (i=8; i--> 0;)
     {
-      printf(", %f", sensor_values[i]);
       if (orientation == 0)
       {
         if (sensor_values[i] > curr_max)
@@ -1138,7 +1222,6 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       // Finally we desire to check if all the sensor values are the same
       sum += sensor_values[i];
     }
-    printf("\n");
   }
   for (i = 0; i<8; i++)
   {
