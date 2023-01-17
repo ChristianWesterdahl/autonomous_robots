@@ -179,7 +179,11 @@ wall(dist, speed, dir, walldist, snesorStop)
 enum ms course_methods[500] = {
   //course here
   ms_fwd, //NEVER CHANGE THIS
+  //moving box-----------
   ms_line,
+  ms_resetOdo,
+  ms_fwd,
+  //driving back and in front of box gate---------
   ms_resetOdo,
   ms_fwd,
   ms_end
@@ -195,9 +199,11 @@ double course_vars[500] = {
   //Todo: add measure distance
   //moving box--------------------------
   10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
-  0.15 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/ //moving box
+  0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving box
   
   //driving back and in front of box gate-------------------
+  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/ //going backwards
+
   //course variables here
   };
 //------------------------end of course----------------------------------
@@ -714,7 +720,7 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->sensorstop_active && !sensor_stop) sensor_stop = p->sensorstop; //condition check
     if (sensor_stop) printf("sensor stop: %d\n", sensor_stop);
     if ( ((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist && p->dist > 0.0) || ((p->right_pos + p->left_pos) / 2 - p->startpos < p->dist && p->dist < 0.0) || p->dist == 0 || sensor_stop)
-    {  
+    { 
       p->finished = 1;
       p->motorspeed_l = 0;
       p->motorspeed_r = 0;
@@ -798,9 +804,7 @@ void update_motcon(motiontype *p, odotype *o)
     v_max = sqrt(2*0.5*fabs(remaining_dist));
     v_delta = 0.005 * (3-sensor_index);
       
-    printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
     // Check if destination is reached or sensors tell motor to stop.
-    printf("Remaining_dist: %f\n", remaining_dist);
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist)) //| mot.sensorstop)
     {
       p->finished = 1;
@@ -856,9 +860,7 @@ void update_motcon(motiontype *p, odotype *o)
       p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
       p->motorspeed_l = p->speedcmd; // v_delta;
     }
-    printf("Motorspeeds: l : %f, r : %f\n", p->motorspeed_l, p->motorspeed_r);
     break;
-
 
   //------------------------------------------Wall-----------------------------------------------
   
