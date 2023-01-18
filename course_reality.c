@@ -138,6 +138,7 @@ enum ms
   ms_line,
   ms_resetOdo,
   ms_wall,
+  ms_measure,
   ms_end
 };
 
@@ -164,6 +165,8 @@ bool compare_floats(float f1, float f2);
 double line_COM(double *sensor_values);
 bool sensorstop(int sensor, double condition, int mode);
 double readsensor(int sensor);
+double measure();
+void quicksort_float(double *arr, int left, int right);
 
 //------------------------deffining the course---------------------------
 /*
@@ -179,26 +182,65 @@ wall(dist, speed, dir, walldist, snesorStop)
 enum ms course_methods[500] = {
   //course here
   ms_fwd, //NEVER CHANGE THIS
+  ms_measure,
   //moving box-----------
-  ms_line,
-  ms_resetOdo,
-  ms_fwd,
+  ms_line, //line till moving box
+  ms_resetOdo, 
+  ms_fwd, //moving box
   //driving back and in front of box gate---------
   ms_resetOdo,
-  ms_fwd,
+  ms_fwd, //going backwards
+  ms_turn, //turning to face line
+  ms_fwd, //driving to line
   ms_resetOdo,
-  ms_turn,
-  ms_fwd,
-  ms_fwd,
-  ms_turn,
-  ms_line,
+  ms_fwd, //driving onto line
+  ms_turn, //turning to face box gates
+  ms_line, //line till box gates
+  ms_fwd,  //driving onto line
+  ms_turn, //turning to go throug gates
   ms_resetOdo,
-  ms_turn,
+  //driving throug box gates an to the next gates----------
+  ms_line, //line till midt gate
+  ms_fwd, //driving throug midt gate
+  ms_line, //line till next gate
+  ms_resetOdo,
+  ms_fwd,
+  //Driving throug first and second gate--------------
+  ms_line, //back throug gate to crossing line
+  ms_resetOdo,
+  //Driwing on white line------------
+  ms_fwd,  //driving to white line
+  ms_resetOdo,
+  ms_turn, //turning onto white line
+  ms_line, //driving on white line
+  ms_fwd, //driving onto line
+  ms_resetOdo,
+  ms_turn, //turning towards garage
+  ms_line, //driving to garage
+  //parking in garage------------
+  ms_resetOdo,
+  ms_turn, //turning in front of door
+  ms_fwd, //drive till end of door
+  ms_resetOdo,
+  ms_fwd, //drive clear of the door
+  ms_resetOdo,
+  ms_turn, //turn to drive past door
+  ms_fwd,  //drive passt door
+  ms_resetOdo,
+  ms_turn, //open door
+  ms_fwd,  //driving back past garage gate
+  ms_resetOdo,
+  ms_turn, //turning towards line
+  ms_fwd,  //driving back to line
+  ms_resetOdo,
+  ms_fwd,  //driving onto line
+  ms_turn, //turning to go into gate
+  ms_fwd,  //drive into garage
   ms_end
   };
 
-//fwd: 1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/
-//line: 2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
+//fwd: 1 /*dist*/, 0.4 /*speed*/, 1 /*crossingLine*/, 1 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+//line: 2.0 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,
 //turn: 90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,
     
 //method variables (make sure these fit together with the methods list, and use all variables acording to the list above)
@@ -206,19 +248,48 @@ double course_vars[500] = {
   0.1, 0.2, 0, 0, 0, 0, 0, //NEVER CHANGE THIS
   //Todo: add measure distance
   //moving box--------------------------
-  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till moving box
-  0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving box
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till moving box
+  0.2 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/                         //moving box
   
   //driving back and in front of box gate-------------------
-  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //going backwards
-  -90.0/180.0*M_PI /*angle*/, 0.2, /*speed*/ //turn to black line
-  2 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving to black line
-  0.15 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0, /*mode*/ //moving to black line
-  90.0/180.0*M_PI /*angle*/, 0.2, /*speed*/ //turn to black line
-  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/, //line till box gate
-  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/ //turn to black line
+  -1.0 /*dist*/, 0.3 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //going backwards
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face line
+  2.0 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving to line
+  0.2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving onto line
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face box gates
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till box gates
+  0.2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving onto line
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                                 //turning to go throug gates
   
-  //course variables here
+  //driving throug box gates an to the next gates----------
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till midt gate
+  0.1 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving throug midt gate
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 4 /*snesor*/, 0.2 /*condition*/, 0/*mode*/,    //line till next gate
+
+  0.15 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 6 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving over line
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  //following white line--------------------
+  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  40.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 1 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  //parking in garage-------------------
+  90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  2 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 1 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  0.48 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  -180.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.4 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 8 /*snesor*/, 0.75 /*condition*/, 1 /*mode*/,                         //driving up to first gate
+  90.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  2 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+  0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
+  90.0/180.0*M_PI /*angle*/, 0.6 /*speed*/,                                                                                               //turning to face thrug first gate
+  0.8 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,
   };
 //------------------------end of course----------------------------------
 
@@ -271,7 +342,7 @@ int main(int argc, char **argv)
 {
   bool change_var, sensor_stop, crossing_line; //to change the method variable counter var_i
   int n = 0, courseLength = 0, i_var = 0, dir = 0, linecolor = 0, arg, time = 0, opt, calibration, sensor = 0, mode = 0;
-  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0, sensor_dist = 0;
+  double dist = 0, angle = 0, speed = 0, acceleration = 0, walldist = 0, sensor_dist = 0,  measurement = 0;
   // install sighandlers
   if (1)
   {
@@ -565,6 +636,16 @@ int main(int argc, char **argv)
       }
     break;
 
+    //taking measurement
+    case ms_measure:
+      measurement = measure();
+      n = n-1;
+      mission.state = course_methods[courseLength-n];
+      change_var = true;
+      printf("measurement: %f\n", measurement);      
+    break;
+
+
     //end
     case ms_end:
     printf("end\n");
@@ -816,7 +897,6 @@ void update_motcon(motiontype *p, odotype *o)
      
     remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
-    v_delta = 0.005 * (2-sensor_index);
       
     printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
     // Check if destination is reached or sensors tell motor to stop.
@@ -842,7 +922,7 @@ void update_motcon(motiontype *p, odotype *o)
     if (p->speedcmd < fabs(p->motorspeed_l)) p->motorspeed_l = p->speedcmd;
     if (p->speedcmd < fabs(p->motorspeed_r)) p->motorspeed_r = p->speedcmd;
       
-    if (v_delta == 0)
+    if (sensor_index == 3 | sensor_index == 4)
     {
       // Decrease velocity:
       if (v_max < p->speedcmd)
@@ -857,18 +937,20 @@ void update_motcon(motiontype *p, odotype *o)
       }
     }
     // If less than 0, this means the sensor index is large (ie. to the left, and we should turn this way)
-    else if (v_delta < 0) 
+    else if (sensor_index > 4) 
     {
+      v_delta = 0.02 * (4-sensor_index);
       p->motorspeed_l += v_delta; //Delta in this case is negative, we should decrease speed on left wheel
-      p->motorspeed_l = fmax(p->motorspeed_l, 0.1);
-      p->motorspeed_r = p->speedcmd;//-= v_delta;
+      p->motorspeed_l = fmax(p->motorspeed_l, 0.03);
+      p->motorspeed_r = 0.5*p->speedcmd;//-= v_delta;
     }
     // If more than 0, this means the sensor index is small (ie. to the right, and we should turn this way)
-    else if (v_delta > 0)
+    else if (sensor_index < 3)
     {
-      p->motorspeed_r -= fmax(v_delta,0.1); // Delta in this case is positive, we should decrease speed on right wheel
-      p->motorspeed_r = fmax(p->motorspeed_r, 0.1);
-      p->motorspeed_l = p->speedcmd;
+      v_delta = 0.02 * (3-sensor_index);
+      p->motorspeed_r -= v_delta; // Delta in this case is positive, we should decrease speed on right wheel
+      p->motorspeed_r = fmax(p->motorspeed_r, 0.03);
+      p->motorspeed_l = 0.5*p->speedcmd;
     }
     //printf("Motorspeeds: l : %f, r : %f\n", p->motorspeed_l, p->motorspeed_r);
     break;
@@ -1078,8 +1160,17 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
   int i;
   int all_equal = 1;
   double sum = 0.0;
+  double ordered[8];
 
+  for (i = 0; i < 8; i++) 
+  {
+    ordered[i] = sensor_values[i];
+  }
+
+  quicksort_float(ordered, 0, 7);
+  
   printf("snesor_values: %f %f %f %f %f %f %f %f\n", sensor_values[0],sensor_values[1],sensor_values[2],sensor_values[3],sensor_values[4],sensor_values[5],sensor_values[6],sensor_values[7]);
+  printf("sorted: %f %f %f %f %f %f %f %f\n", ordered[0],ordered[1],ordered[2],ordered[3],ordered[4],ordered[5],ordered[6],ordered[7]);
   printf("Linecolor: %d\n", linecolor);
   printf("SENSOR VALUES: ");
   if (linecolor == 0)
@@ -1120,7 +1211,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       printf(", %f", sensor_values[i]);
       if (orientation == 0)
       {
-        if (sensor_values[i] > curr_max)
+        if (sensor_values[i] > ordered[5])
         {
           curr_max = sensor_values[i];
           chosen_index = i;
@@ -1128,7 +1219,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       }
       else
       {
-        if (sensor_values[i] >= curr_max)
+        if (sensor_values[i] >= ordered[5])
         {
           curr_max = sensor_values[i];
           chosen_index = i;
@@ -1213,4 +1304,45 @@ double readsensor(int sensor)
     sensor_value = (KA)/(sensor_value - KB);
   }
   return sensor_value;
+}
+
+double measure() 
+{
+  double sensor_value;
+  double angle;
+  double angle_rad;
+  double distance;
+  
+  sensor_value = readsensor(8);
+
+  angle_rad = asin((sin(90.0*(M_PI/180.0)) * 0.18) / sensor_value);
+  angle = abs(180.0 - (90.0 + angle_rad * (180.0/M_PI)));
+  distance = (sin(angle * (M_PI/180.0)) * sensor_value) / sin(90.0 * (M_PI/180.0));
+  return distance;
+}
+
+void quicksort_float(double *arr, int left, int right) 
+{
+    int i = left, j = right;
+    double tmp;
+    double pivot = arr[(left + right) / 2];
+    /* partition */
+    while (i <= j) {
+        while (arr[i] < pivot)
+            i++;
+        while (arr[j] > pivot)
+            j--;
+        if (i <= j) {
+            tmp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = tmp;
+            i++;
+            j--;
+        }
+    }
+    /* recursion */
+    if (left < j)
+        quicksort_float(arr, left, j);
+    if (i < right)
+        quicksort_float(arr, i, right);
 }
