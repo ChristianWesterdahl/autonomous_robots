@@ -212,7 +212,13 @@ enum ms course_methods[500] = {
   ms_fwd,  //driving to white line
   ms_resetOdo,
   ms_turn, //turning onto white line
-  ms_line, //driving on white line
+  /*driving on odometry*/
+  ms_fwd,
+  ms_resetOdo,
+  ms_turn,
+  ms_fwd,
+  ms_resetOdo,
+  /*driving on odometry end*/
   ms_fwd, //driving onto line
   ms_resetOdo,
   ms_turn, //turning towards garage
@@ -270,9 +276,15 @@ double course_vars[500] = {
   10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
   
   //following white line--------------------
-  0.6 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  0.75 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
   40.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
-  10 /*dist*/, 0.2 /*speed*/, 0 /*dir*/, 1 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
+  
+  /*driving on odometry*/
+  1.3 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  53.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
+  3 /*dist*/, 0.2 /*speed*/, 1 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
+  /*driving on odometry end*/
+  
   0.25 /*dist*/, 0.2 /*speed*/, 0 /*crossingLine*/, 0 /*sensorstop*/, 4 /*snesor*/, 0.2 /*condition*/, 0 /*mode*/,                         //driving up to first gate
   -90.0/180.0*M_PI /*angle*/, 0.2 /*speed*/,                                                                                               //turning to face thrug first gate
   10 /*dist*/, 0.2 /*speed*/, 1 /*dir*/, 0 /*col*/ , 1 /*crossingLine*/, 0 /*sensorStop*/, 0 /*snesor*/, 0.75 /*condition*/, 0/*mode*/,    //line till next gate
@@ -898,7 +910,7 @@ void update_motcon(motiontype *p, odotype *o)
     remaining_dist = p->dist -(((p->right_pos + p->left_pos) / 2 - p->startpos)); // Calculate remaining distance
     v_max = sqrt(2*0.5*fabs(remaining_dist));
       
-    printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
+    //printf("sensor index: %d, v_delta: %f, v_max: %f, maxspeed: %f\n", sensor_index, v_delta, v_max, p->speedcmd);
     // Check if destination is reached or sensors tell motor to stop.
     //printf("Remaining_dist: %f\n", remaining_dist);
     if (((p->right_pos + p->left_pos) / 2 - p->startpos > p->dist) || sensor_stop)
@@ -1169,10 +1181,10 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
 
   quicksort_float(ordered, 0, 7);
   
-  printf("snesor_values: %f %f %f %f %f %f %f %f\n", sensor_values[0],sensor_values[1],sensor_values[2],sensor_values[3],sensor_values[4],sensor_values[5],sensor_values[6],sensor_values[7]);
-  printf("sorted: %f %f %f %f %f %f %f %f\n", ordered[0],ordered[1],ordered[2],ordered[3],ordered[4],ordered[5],ordered[6],ordered[7]);
-  printf("Linecolor: %d\n", linecolor);
-  printf("SENSOR VALUES: ");
+  //printf("snesor_values: %f %f %f %f %f %f %f %f\n", sensor_values[0],sensor_values[1],sensor_values[2],sensor_values[3],sensor_values[4],sensor_values[5],sensor_values[6],sensor_values[7]);
+  //printf("sorted: %f %f %f %f %f %f %f %f\n", ordered[0],ordered[1],ordered[2],ordered[3],ordered[4],ordered[5],ordered[6],ordered[7]);
+  //printf("Linecolor: %d\n", linecolor);
+  //printf("SENSOR VALUES: ");
   if (linecolor == 0)
   {
     double curr_min = 1.0;
@@ -1181,7 +1193,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     {
       if (orientation == 0)
       {
-        printf(" %f", sensor_values[i]);
+        //printf(" %f", sensor_values[i]);
         if (sensor_values[i] < 0.45)
         {
           curr_min = sensor_values[i];
@@ -1208,7 +1220,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
     // Loop backwards over the input array of sensor values:
     for (i=8; i--> 0;)
     {
-      printf(", %f", sensor_values[i]);
+      //printf(", %f", sensor_values[i]);
       if (orientation == 0)
       {
         if (sensor_values[i] > ordered[5])
@@ -1228,7 +1240,7 @@ int find_line_min(double *sensor_values, int orientation, int linecolor)
       // Finally we desire to check if all the sensor values are the same
       sum += sensor_values[i];
     }
-    printf("\n");
+    //printf("\n");
   }
   for (i = 0; i<8; i++)
   {
